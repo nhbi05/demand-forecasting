@@ -1,73 +1,39 @@
+"""PyTorch LSTM forecaster for the demand-forecasting project.
+
+Components:
+    LSTMDataset       — wraps the numpy arrays produced by preprocessing.
+    LSTMForecaster    — the model: LSTM body + product embedding + linear head.
+    train_model       — training loop with early stopping.
+    predict           — batch inference.
+    inverse_scale     — undo per-product MinMax scaling on predictions.
+    compute_metrics   — RMSE / MAE / MAPE.
+    naive_baseline / seasonal_naive_baseline — sanity-check baselines.
 """
-LSTM Model for demand forecasting
-Input: (batch, seq_length, n_features)
-Output: predictions with shape (n_test_samples,)
-"""
+
+from __future__ import annotations
 
 import numpy as np
-from tensorflow import keras
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+import torch
+from torch.utils.data import Dataset
 
 
-class LSTMModel:
-    def __init__(self, seq_length, n_features, epochs=50, batch_size=16, verbose=0):
-        self.seq_length = seq_length
-        self.n_features = n_features
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.verbose = verbose
-        self.model = None
-        
-    def build_model(self):
-        """Build LSTM architecture"""
-        self.model = Sequential([
-            LSTM(64, activation='relu', input_shape=(self.seq_length, self.n_features),
-                 return_sequences=True),
-            Dropout(0.2),
-            LSTM(32, activation='relu'),
-            Dropout(0.2),
-            Dense(16, activation='relu'),
-            Dense(1, activation='sigmoid')  # Sigmoid for [0,1] range
-        ])
-        self.model.compile(optimizer=Adam(learning_rate=0.001), loss='mse', metrics=['mae'])
-        return self.model
-    
-    def train_and_predict(self, X_train, y_train, X_test):
-        """
-        Train LSTM model and make predictions
-        
-        Args:
-            X_train: (n_train_seq, seq_length, n_features)
-            y_train: (n_train_seq,)
-            X_test: (n_test_seq, seq_length, n_features)
-        
-        Returns:
-            predictions: (n_test_samples,) - IMPORTANT: must match X_test.shape[0]
-        """
-        # Build and train
-        self.build_model()
-        self.model.fit(
-            X_train, y_train,
-            epochs=self.epochs,
-            batch_size=self.batch_size,
-            verbose=self.verbose,
-            validation_split=0.1
-        )
-        
-        # Predict
-        predictions = self.model.predict(X_test, verbose=0).flatten()
-        
-        return predictions
+class LSTMDataset(Dataset):
+    """Wraps `(X_qty, X_cal, prod_idx, y)` numpy arrays as a PyTorch Dataset.
 
-
-def train_and_predict_lstm(X_train, y_train, X_test, seq_length=10, n_features=10, 
-                           epochs=50, verbose=0):
+    Each item is a 4-tuple of tensors:
+        (past_quantity, calendar, product_idx, target)
+    matching the model's forward-pass argument names.
     """
-    Utility function for LSTM training and prediction
-    
-    Returns predictions with same length as X_test
-    """
-    lstm = LSTMModel(seq_length, n_features, epochs=epochs, verbose=verbose)
-    return lstm.train_and_predict(X_train, y_train, X_test)
+
+    def __init__(self, X_qty: np.ndarray, X_cal: np.ndarray,
+                 prod_idx: np.ndarray, y: np.ndarray):
+        self.X_qty = torch.from_numpy(X_qty).float()
+        self.X_cal = torch.from_numpy(X_cal).float()
+        self.prod_idx = torch.from_numpy(prod_idx).long()
+        self.y = torch.from_numpy(y).float()
+
+    def __len__(self) -> int:
+        return self.X_qty.shape[0]
+
+    def __getitem__(self, i: int):
+        return self.X_qty[i], self.X_cal[i], self.prod_idx[i], self.y[i]
