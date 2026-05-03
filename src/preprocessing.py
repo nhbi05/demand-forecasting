@@ -17,3 +17,12 @@ def load_raw_sales(csv_path: str = "sales.csv") -> pd.DataFrame:
         df = df.drop(columns=["Unnamed: 0"])
     df["date"] = pd.to_datetime(df["date"])
     return df
+
+
+def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
+    """Sum `quantity` per (item_id, date) across all stores.
+
+    Negative quantities (returns) are kept and net into the daily total —
+    a return of 5 on a day that also had 8 sales becomes net demand of 3.
+    """
+    return df.groupby(["item_id", "date"], as_index=False)["quantity"].sum()
