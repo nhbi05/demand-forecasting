@@ -1,6 +1,7 @@
 """Tests for src/preprocessing.py."""
 
 import io
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -219,3 +220,76 @@ def test_scale_per_product_independent_per_product():
     assert a_max == pytest.approx(1.0)
     assert b_max == pytest.approx(1.0)
     assert "a" in scalers and "b" in scalers
+
+
+def test_create_sequences_yields_correct_shapes():
+    # Single product, 20 days. lookback=5, horizon=3 → windows = 20 - 5 - 3 + 1 = 13
+    days = pd.date_range("2024-01-01", periods=20)
+    daily = pd.DataFrame({
+        "item_id": ["a"] * 20,
+        "date": days,
+        "quantity_scaled": np.linspace(0, 1, 20),
+        "dow_sin": np.zeros(20), "dow_cos": np.ones(20),
+        "dom_sin": np.zeros(20), "dom_cos": np.ones(20),
+        "month_sin": np.zeros(20), "month_cos": np.ones(20),
+    })
+    product_to_idx = {"a": 0}
+
+    X_qty, X_cal, prod_idx, y = preprocessing.create_sequences(
+        daily, product_to_idx, lookback=5, horizon=3
+    )
+
+    assert X_qty.shape == (13, 5, 1)
+    assert X_cal.shape == (13, 5, 6)
+    assert prod_idx.shape == (13,)
+    assert y.shape == (13, 3)
+
+
+def test_create_sequences_input_and_target_are_consecutive():
+    # Use distinct values so we can check ordering.
+    days = pd.date_range("2024-01-01", periods=10)
+    daily = pd.DataFrame({
+        "item_id": ["a"] * 10,
+        "date": days,
+        "quantity_scaled": np.arange(10, dtype=float),
+        "dow_sin": np.zeros(10), "dow_cos": np.zeros(10),
+        "dom_sin": np.zeros(10), "dom_cos": np.zeros(10),
+        "month_sin": np.zeros(10), "month_cos": np.zeros(10),
+    })
+    X_qty, _, _, y = preprocessing.create_sequences(
+        daily, {"a": 0}, lookback=3, horizon=2
+    )
+
+    # First window: input = [0,1,2], target = [3,4]
+    assert list(X_qty[0, :, 0]) == [0.0, 1.0, 2.0]
+    assert list(y[0]) == [3.0, 4.0]
+
+
+def test_create_sequences_handles_multiple_products_independently():
+    # Two products, no cross-bleeding.
+    days = pd.date_range("2024-01-01", periods=8)
+    daily = pd.concat([
+        pd.DataFrame({
+            "item_id": ["a"] * 8, "date": days,
+            "quantity_scaled": np.arange(8, dtype=float) + 100,
+            "dow_sin": 0, "dow_cos": 0, "dom_sin": 0, "dom_cos": 0,
+            "month_sin": 0, "month_cos": 0,
+        }),
+        pd.DataFrame({
+            "item_id": ["b"] * 8, "date": days,
+            "quantity_scaled": np.arange(8, dtype=float) + 200,
+            "dow_sin": 0, "dow_cos": 0, "dom_sin": 0, "dom_cos": 0,
+            "month_sin": 0, "month_cos": 0,
+        }),
+    ]).reset_index(drop=True)
+
+    X_qty, _, prod_idx, y = preprocessing.create_sequences(
+        daily, {"a": 0, "b": 1}, lookback=3, horizon=2
+    )
+
+    # 8 days, lookback 3, horizon 2 → 4 windows per product → 8 total
+    assert X_qty.shape[0] == 8
+    a_windows = X_qty[prod_idx == 0]
+    b_windows = X_qty[prod_idx == 1]
+    assert a_windows[:, :, 0].min() >= 100
+    assert b_windows[:, :, 0].min() >= 200
