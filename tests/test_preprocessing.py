@@ -54,3 +54,38 @@ def test_aggregate_daily_keeps_negative_returns_in_net():
     daily = preprocessing.aggregate_daily(raw)
 
     assert daily["quantity"].iloc[0] == 3.0  # net demand
+
+
+def test_select_top_products_filters_to_full_history_then_top_n():
+    # 4 days of data total
+    days = pd.date_range("2024-01-01", "2024-01-04")
+    rows = []
+    # 'a' has all 4 days, totals 100
+    for d in days:
+        rows.append({"item_id": "a", "date": d, "quantity": 25})
+    # 'b' has all 4 days, totals 200 → highest, but we filter top-1
+    for d in days:
+        rows.append({"item_id": "b", "date": d, "quantity": 50})
+    # 'c' has only 2 days — should be excluded for sparse history
+    for d in days[:2]:
+        rows.append({"item_id": "c", "date": d, "quantity": 999})  # would be top by volume
+
+    daily = pd.DataFrame(rows)
+
+    chosen = preprocessing.select_top_products(daily, n=1, full_history_days=4)
+
+    assert chosen == ["b"]
+
+
+def test_select_top_products_returns_n_when_more_eligible_exist():
+    days = pd.date_range("2024-01-01", "2024-01-04")
+    rows = []
+    for item, qty in [("a", 10), ("b", 50), ("c", 30)]:
+        for d in days:
+            rows.append({"item_id": item, "date": d, "quantity": qty})
+
+    daily = pd.DataFrame(rows)
+
+    chosen = preprocessing.select_top_products(daily, n=2, full_history_days=4)
+
+    assert chosen == ["b", "c"]  # ordered by total quantity desc
