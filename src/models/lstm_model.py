@@ -12,6 +12,8 @@ Components:
 
 from __future__ import annotations
 
+import copy
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -89,3 +91,92 @@ class LSTMForecaster(nn.Module):
         _, (h_n, _) = self.lstm(x)
         last_hidden = h_n[-1]                            # (B, hidden_size)
         return self.head(last_hidden)                    # (B, horizon)
+
+
+def train_model(
+    model: LSTMForecaster,
+    train_loader,
+    val_loader,
+    epochs: int = 100,
+    lr: float = 1e-3,
+    patience: int = 10,
+    device: str = "cpu",
+    verbose: bool = True,
+):
+    """Train the LSTM with MSE loss, Adam, and early stopping on val loss.
+
+    Returns:
+        (best_model, best_val_loss, best_epoch, history)
+
+    `best_epoch` is the 1-indexed epoch number at which `best_val_loss`
+    was achieved. Use this — not `len(history["val_loss"])` — when retraining
+    on train+val combined, otherwise you'll overshoot by the patience window.
+    """
+    model = model.to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    loss_fn = torch.nn.MSELoss()
+
+    best_val = float("inf")
+    best_epoch = 0
+    best_state = copy.deepcopy(model.state_dict())
+    epochs_without_improvement = 0
+
+    history = {"train_loss": [], "val_loss": []}
+
+    for epoch in range(1, epochs + 1):
+        # ---- train ----
+        model.train()
+        train_total, train_n = 0.0, 0
+        for past_qty, calendar, prod_idx, y in train_loader:
+            past_qty = past_qty.to(device)
+            calendar = calendar.to(device)
+            prod_idx = prod_idx.to(device)
+            y = y.to(device)
+
+            optimizer.zero_grad()
+            preds = model(past_qty, calendar, prod_idx)
+            loss = loss_fn(preds, y)
+            loss.backward()
+            optimizer.step()
+
+            train_total += loss.item() * y.size(0)
+            train_n += y.size(0)
+        train_loss = train_total / max(train_n, 1)
+
+        # ---- val ----
+        model.eval()
+        val_total, val_n = 0.0, 0
+        with torch.no_grad():
+            for past_qty, calendar, prod_idx, y in val_loader:
+                past_qty = past_qty.to(device)
+                calendar = calendar.to(device)
+                prod_idx = prod_idx.to(device)
+                y = y.to(device)
+                preds = model(past_qty, calendar, prod_idx)
+                loss = loss_fn(preds, y)
+                val_total += loss.item() * y.size(0)
+                val_n += y.size(0)
+        val_loss = val_total / max(val_n, 1)
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
+        if verbose:
+            print(f"epoch {epoch:3d} | train {train_loss:.4f} | val {val_loss:.4f}")
+
+        # ---- early stopping ----
+        if val_loss < best_val:
+            best_val = val_loss
+            best_epoch = epoch
+            best_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if epochs_without_improvement > patience:
+                if verbose:
+                    print(f"Early stopping at epoch {epoch} "
+                          f"(best was epoch {best_epoch} @ val {best_val:.4f}).")
+                break
+
+    model.load_state_dict(best_state)
+    return model, best_val, best_epoch, history

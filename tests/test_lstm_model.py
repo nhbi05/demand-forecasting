@@ -60,3 +60,55 @@ def test_forecaster_embedding_actually_distinguishes_products():
     out_b = model(past_qty, calendar, torch.tensor([1, 1], dtype=torch.long))
 
     assert not torch.allclose(out_a, out_b), "Embedding must influence output"
+
+
+from torch.utils.data import DataLoader
+
+
+def test_train_model_returns_trained_model_and_history():
+    torch.manual_seed(0)
+    np.random.seed(0)
+    X_qty, X_cal, prod_idx, y = _dummy_arrays(n=16, lookback=5, horizon=3)
+    train_ds = lstm_model.LSTMDataset(X_qty[:12], X_cal[:12], prod_idx[:12], y[:12])
+    val_ds   = lstm_model.LSTMDataset(X_qty[12:], X_cal[12:], prod_idx[12:], y[12:])
+    train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
+    val_loader   = DataLoader(val_ds,   batch_size=4)
+
+    model = lstm_model.LSTMForecaster(
+        n_products=2, embed_dim=4, lookback=5, horizon=3,
+        hidden_size=8, num_layers=1, dropout=0.0,
+    )
+
+    trained, best_val, best_epoch, history = lstm_model.train_model(
+        model, train_loader, val_loader, epochs=3, lr=1e-2, patience=10,
+    )
+
+    assert isinstance(trained, lstm_model.LSTMForecaster)
+    assert isinstance(best_val, float)
+    assert isinstance(best_epoch, int)
+    assert 1 <= best_epoch <= 3
+    assert "train_loss" in history and "val_loss" in history
+    assert len(history["train_loss"]) == 3 and len(history["val_loss"]) == 3
+    # best_epoch must point to the epoch with the lowest val loss
+    assert history["val_loss"][best_epoch - 1] == min(history["val_loss"])
+
+
+def test_train_model_early_stops_when_val_does_not_improve():
+    """Patience=0 should stop after the first epoch (since improvement check fails)."""
+    torch.manual_seed(0)
+    X_qty, X_cal, prod_idx, y = _dummy_arrays(n=8, lookback=5, horizon=3)
+    train_ds = lstm_model.LSTMDataset(X_qty[:6], X_cal[:6], prod_idx[:6], y[:6])
+    val_ds   = lstm_model.LSTMDataset(X_qty[6:], X_cal[6:], prod_idx[6:], y[6:])
+    train_loader = DataLoader(train_ds, batch_size=2)
+    val_loader   = DataLoader(val_ds,   batch_size=2)
+
+    model = lstm_model.LSTMForecaster(
+        n_products=2, embed_dim=2, lookback=5, horizon=3,
+        hidden_size=4, num_layers=1, dropout=0.0,
+    )
+    _, _, _, history = lstm_model.train_model(
+        model, train_loader, val_loader, epochs=20, lr=1e-2, patience=0,
+    )
+
+    # With patience=0, should stop very early (≤ 2 epochs typically).
+    assert len(history["val_loss"]) <= 5
