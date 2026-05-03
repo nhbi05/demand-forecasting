@@ -180,3 +180,85 @@ def train_model(
 
     model.load_state_dict(best_state)
     return model, best_val, best_epoch, history
+
+
+def predict(model: LSTMForecaster, loader, device: str = "cpu") -> np.ndarray:
+    """Run the model on a DataLoader and return predictions as a numpy array.
+
+    Output shape: (N, horizon).
+    """
+    model = model.to(device).eval()
+    out_chunks = []
+    with torch.no_grad():
+        for past_qty, calendar, prod_idx, _y in loader:
+            past_qty = past_qty.to(device)
+            calendar = calendar.to(device)
+            prod_idx = prod_idx.to(device)
+            preds = model(past_qty, calendar, prod_idx)
+            out_chunks.append(preds.cpu().numpy())
+    return np.concatenate(out_chunks, axis=0).astype(np.float32)
+
+
+def inverse_scale_predictions(preds_scaled: np.ndarray,
+                              item_ids: np.ndarray,
+                              scalers: dict) -> np.ndarray:
+    """Inverse the per-product MinMax scaling on a (N, horizon) array.
+
+    `item_ids` is parallel to the rows of `preds_scaled` and identifies which
+    product each row belongs to.
+    """
+    out = np.zeros_like(preds_scaled, dtype=np.float32)
+    for i, item_id in enumerate(item_ids):
+        scaler = scalers[item_id]
+        row = preds_scaled[i].reshape(-1, 1)
+        out[i] = scaler.inverse_transform(row).flatten().astype(np.float32)
+    return out
+
+
+def compute_metrics(preds: np.ndarray, targets: np.ndarray) -> dict:
+    """RMSE, MAE, MAPE computed across all (window, day) pairs.
+
+    MAPE skips entries where target == 0 (would be undefined).
+    """
+    preds = np.asarray(preds, dtype=np.float64).flatten()
+    targets = np.asarray(targets, dtype=np.float64).flatten()
+    err = preds - targets
+
+    rmse = float(np.sqrt(np.mean(err ** 2)))
+    mae = float(np.mean(np.abs(err)))
+
+    nonzero = targets != 0
+    if nonzero.sum() == 0:
+        mape = float("nan")
+    else:
+        mape = float(np.mean(np.abs(err[nonzero] / targets[nonzero])) * 100.0)
+
+    return {"rmse": rmse, "mae": mae, "mape": mape}
+
+
+def naive_baseline(past_qty_2d: np.ndarray, horizon: int) -> np.ndarray:
+    """Forecast that just repeats the last observed value `horizon` times.
+
+    Args:
+        past_qty_2d: (N, lookback) — last column is "today".
+        horizon: number of days to forecast.
+    """
+    last = past_qty_2d[:, -1:]
+    return np.tile(last, (1, horizon)).astype(np.float32)
+
+
+def seasonal_naive_baseline(past_qty_2d: np.ndarray, horizon: int,
+                            period: int = 7) -> np.ndarray:
+    """Forecast = same weekday last period.
+
+    For days t..t+horizon-1, predict y_{t-period}..y_{t+horizon-1-period}.
+    Requires past_qty_2d to have at least `period` columns; if `horizon`
+    exceeds `period`, the pattern repeats.
+    """
+    n, look = past_qty_2d.shape
+    if look < period:
+        raise ValueError(f"past_qty has {look} cols < period {period}")
+    out = np.zeros((n, horizon), dtype=np.float32)
+    for h in range(horizon):
+        out[:, h] = past_qty_2d[:, -period + (h % period)]
+    return out
