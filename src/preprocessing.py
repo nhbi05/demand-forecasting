@@ -7,6 +7,10 @@ model notebooks can import this module without conflict.
 
 from __future__ import annotations
 
+import json
+import pickle
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -192,3 +196,43 @@ def create_sequences(
     prod_idx = np.asarray(idx_list, dtype=np.int64)
     y = np.asarray(y_list, dtype=np.float32)
     return X_qty, X_cal, prod_idx, y
+
+
+def prepare_data(
+    csv_path: str = "sales.csv",
+    n_products: int = 50,
+    full_history_days: int = 761,
+    val_days: int = 60,
+    test_frac: float = 0.20,
+    outlier_pct: float = 99.5,
+    outdir: str = "data/processed",
+) -> dict:
+    """End-to-end preprocessing.
+
+    Pipeline:
+        load → aggregate daily → select top-N → cap outliers
+              → add calendar features → time split → per-product scaling
+              → write daily.csv, scalers.pkl, splits.json
+
+    Returns the split-boundaries dict.
+    """
+    raw = load_raw_sales(csv_path)
+    daily = aggregate_daily(raw)
+    top_ids = select_top_products(daily, n=n_products,
+                                  full_history_days=full_history_days)
+    daily = daily[daily["item_id"].isin(top_ids)].copy()
+    daily = cap_outliers(daily, percentile=outlier_pct)
+    daily = add_calendar_features(daily)
+
+    splits = split_time_based(daily, val_days=val_days, test_frac=test_frac)
+    daily, scalers = scale_per_product(daily, splits["train_end"])
+
+    out = Path(outdir)
+    out.mkdir(parents=True, exist_ok=True)
+    daily.to_csv(out / "daily.csv", index=False)
+    with open(out / "scalers.pkl", "wb") as f:
+        pickle.dump(scalers, f)
+    with open(out / "splits.json", "w") as f:
+        json.dump(splits, f, indent=2)
+
+    return splits

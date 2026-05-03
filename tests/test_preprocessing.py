@@ -1,6 +1,9 @@
 """Tests for src/preprocessing.py."""
 
 import io
+import json
+import pickle
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -293,3 +296,47 @@ def test_create_sequences_handles_multiple_products_independently():
     b_windows = X_qty[prod_idx == 1]
     assert a_windows[:, :, 0].min() >= 100
     assert b_windows[:, :, 0].min() >= 200
+
+
+def test_prepare_data_writes_three_artifact_files(tmp_path):
+    # Build a tiny but full-shaped CSV: 2 products × 100 days each.
+    days = pd.date_range("2024-01-01", periods=100)
+    rows = []
+    for d in days:
+        rows.append({"date": d, "item_id": "a", "quantity": 10.0,
+                     "price_base": 1.0, "sum_total": 10.0, "store_id": 1})
+        rows.append({"date": d, "item_id": "b", "quantity": 5.0,
+                     "price_base": 1.0, "sum_total": 5.0, "store_id": 1})
+    csv = tmp_path / "sales.csv"
+    pd.DataFrame(rows).to_csv(csv, index_label="")
+
+    outdir = tmp_path / "processed"
+    splits = preprocessing.prepare_data(
+        csv_path=str(csv),
+        n_products=2,
+        full_history_days=100,
+        val_days=10,
+        test_frac=0.20,
+        outdir=str(outdir),
+    )
+
+    assert (outdir / "daily.csv").exists()
+    assert (outdir / "scalers.pkl").exists()
+    assert (outdir / "splits.json").exists()
+
+    # splits.json is parseable and matches the returned dict
+    with open(outdir / "splits.json") as f:
+        on_disk = json.load(f)
+    assert on_disk == splits
+
+    # scalers.pkl loads and contains both items
+    with open(outdir / "scalers.pkl", "rb") as f:
+        scalers = pickle.load(f)
+    assert set(scalers) == {"a", "b"}
+
+    # daily.csv has the expected columns
+    daily = pd.read_csv(outdir / "daily.csv", parse_dates=["date"])
+    expected_cols = {"date", "item_id", "quantity", "quantity_scaled",
+                     "dow_sin", "dow_cos", "dom_sin", "dom_cos",
+                     "month_sin", "month_cos"}
+    assert expected_cols.issubset(daily.columns)
