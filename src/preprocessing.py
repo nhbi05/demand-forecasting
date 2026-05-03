@@ -75,3 +75,34 @@ def add_calendar_features(daily: pd.DataFrame) -> pd.DataFrame:
     out["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12.0)
     out["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12.0)
     return out
+
+
+def split_time_based(daily: pd.DataFrame, val_days: int = 60,
+                     test_frac: float = 0.20) -> dict:
+    """Time-based 80/20 train/test split with a `val_days` slice carved out
+    of the train portion (used for early stopping and tuning).
+
+    Returns a dict of ISO date strings: train_start, train_end, val_start,
+    val_end, test_start, test_end.
+    """
+    dates = sorted(pd.to_datetime(daily["date"].unique()))
+    n = len(dates)
+
+    test_size = int(n * test_frac)
+    train_plus_val_size = n - test_size
+    train_size = train_plus_val_size - val_days
+
+    if train_size < 1:
+        raise ValueError(
+            f"Not enough data: {n} days with val_days={val_days}, "
+            f"test_frac={test_frac} leaves {train_size} train days."
+        )
+
+    return {
+        "train_start": dates[0].strftime("%Y-%m-%d"),
+        "train_end":   dates[train_size - 1].strftime("%Y-%m-%d"),
+        "val_start":   dates[train_size].strftime("%Y-%m-%d"),
+        "val_end":     dates[train_size + val_days - 1].strftime("%Y-%m-%d"),
+        "test_start":  dates[train_size + val_days].strftime("%Y-%m-%d"),
+        "test_end":    dates[-1].strftime("%Y-%m-%d"),
+    }
