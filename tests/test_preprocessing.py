@@ -89,3 +89,35 @@ def test_select_top_products_returns_n_when_more_eligible_exist():
     chosen = preprocessing.select_top_products(daily, n=2, full_history_days=4)
 
     assert chosen == ["b", "c"]  # ordered by total quantity desc
+
+
+def test_cap_outliers_caps_at_per_product_percentile():
+    # Product 'a' has values 1..100; 99.5th percentile ≈ 99.505
+    days = pd.date_range("2024-01-01", periods=100)
+    rows = [{"item_id": "a", "date": d, "quantity": float(i + 1)}
+            for i, d in enumerate(days)]
+    rows.append({"item_id": "a", "date": days[-1] + pd.Timedelta(days=1),
+                 "quantity": 99999.0})  # huge outlier
+
+    daily = pd.DataFrame(rows)
+    capped = preprocessing.cap_outliers(daily, percentile=99.5)
+
+    # The 99999 value must be reduced to the 99.5th percentile of 'a'
+    expected_cap = daily[daily["item_id"] == "a"]["quantity"].quantile(0.995)
+    assert capped["quantity"].max() == pytest.approx(expected_cap)
+
+
+def test_cap_outliers_does_not_cross_products():
+    # Product 'a' is small-scale, 'b' is huge-scale; capping 'a' shouldn't
+    # be influenced by 'b'.
+    rows = (
+        [{"item_id": "a", "date": pd.Timestamp(f"2024-01-{d:02d}"), "quantity": 1.0}
+         for d in range(1, 21)]
+        + [{"item_id": "b", "date": pd.Timestamp(f"2024-01-{d:02d}"), "quantity": 1000.0}
+           for d in range(1, 21)]
+    )
+    daily = pd.DataFrame(rows)
+    capped = preprocessing.cap_outliers(daily, percentile=99.5)
+
+    assert capped[capped["item_id"] == "a"]["quantity"].max() == 1.0
+    assert capped[capped["item_id"] == "b"]["quantity"].max() == 1000.0

@@ -7,6 +7,7 @@ model notebooks can import this module without conflict.
 
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 
 
@@ -40,3 +41,17 @@ def select_top_products(daily: pd.DataFrame, n: int = 50,
         .sum()
     )
     return totals.nlargest(n).index.tolist()
+
+
+def cap_outliers(daily: pd.DataFrame, percentile: float = 99.5) -> pd.DataFrame:
+    """Winsorize each product's quantity at its own percentile.
+
+    Values above the cap are replaced by the cap. Values below are unchanged.
+    """
+    out = daily.copy()
+    caps = (
+        daily.groupby("item_id")["quantity"]
+        .transform(lambda s: s.quantile(percentile / 100.0))
+    )
+    out["quantity"] = np.minimum(out["quantity"], caps)
+    return out
