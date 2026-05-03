@@ -26,3 +26,17 @@ def aggregate_daily(df: pd.DataFrame) -> pd.DataFrame:
     a return of 5 on a day that also had 8 sales becomes net demand of 3.
     """
     return df.groupby(["item_id", "date"], as_index=False)["quantity"].sum()
+
+
+def select_top_products(daily: pd.DataFrame, n: int = 50,
+                        full_history_days: int = 761) -> list[str]:
+    """Return the IDs of the top-N products by total quantity, restricted to
+    those that had at least one sale on every day in the full date range."""
+    counts = daily.groupby("item_id")["date"].nunique()
+    eligible = counts[counts >= full_history_days].index
+    totals = (
+        daily[daily["item_id"].isin(eligible)]
+        .groupby("item_id")["quantity"]
+        .sum()
+    )
+    return totals.nlargest(n).index.tolist()
