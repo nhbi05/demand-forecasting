@@ -1295,14 +1295,18 @@ def test_train_model_returns_trained_model_and_history():
         hidden_size=8, num_layers=1, dropout=0.0,
     )
 
-    trained, best_val, history = lstm_model.train_model(
+    trained, best_val, best_epoch, history = lstm_model.train_model(
         model, train_loader, val_loader, epochs=3, lr=1e-2, patience=10,
     )
 
     assert isinstance(trained, lstm_model.LSTMForecaster)
     assert isinstance(best_val, float)
+    assert isinstance(best_epoch, int)
+    assert 1 <= best_epoch <= 3
     assert "train_loss" in history and "val_loss" in history
     assert len(history["train_loss"]) == 3 and len(history["val_loss"]) == 3
+    # best_epoch must point to the epoch with the lowest val loss
+    assert history["val_loss"][best_epoch - 1] == min(history["val_loss"])
 
 
 def test_train_model_early_stops_when_val_does_not_improve():
@@ -1318,7 +1322,7 @@ def test_train_model_early_stops_when_val_does_not_improve():
         n_products=2, embed_dim=2, lookback=5, horizon=3,
         hidden_size=4, num_layers=1, dropout=0.0,
     )
-    _, _, history = lstm_model.train_model(
+    _, _, _, history = lstm_model.train_model(
         model, train_loader, val_loader, epochs=20, lr=1e-2, patience=0,
     )
 
@@ -1352,13 +1356,18 @@ def train_model(
     """Train the LSTM with MSE loss, Adam, and early stopping on val loss.
 
     Returns:
-        (best_model, best_val_loss, history) where history is a dict of lists.
+        (best_model, best_val_loss, best_epoch, history)
+
+    `best_epoch` is the 1-indexed epoch number at which `best_val_loss`
+    was achieved. Use this — not `len(history["val_loss"])` — when retraining
+    on train+val combined, otherwise you'll overshoot by the patience window.
     """
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = torch.nn.MSELoss()
 
     best_val = float("inf")
+    best_epoch = 0
     best_state = copy.deepcopy(model.state_dict())
     epochs_without_improvement = 0
 
@@ -1408,17 +1417,19 @@ def train_model(
         # ---- early stopping ----
         if val_loss < best_val:
             best_val = val_loss
+            best_epoch = epoch
             best_state = copy.deepcopy(model.state_dict())
             epochs_without_improvement = 0
         else:
             epochs_without_improvement += 1
             if epochs_without_improvement > patience:
                 if verbose:
-                    print(f"Early stopping at epoch {epoch}.")
+                    print(f"Early stopping at epoch {epoch} "
+                          f"(best was epoch {best_epoch} @ val {best_val:.4f}).")
                 break
 
     model.load_state_dict(best_state)
-    return model, best_val, history
+    return model, best_val, best_epoch, history
 ```
 
 - [ ] **Step 13.4 — Verify pass**
@@ -2469,14 +2480,16 @@ for i, cfg in enumerate(CONFIGS):
         dropout=cfg["dropout"],
         n_calendar=6,
     )
-    m, best_val, hist = lstm_model.train_model(
+    m, best_val, best_epoch, hist = lstm_model.train_model(
         m, tl, vl, epochs=EPOCHS, lr=LR, patience=PATIENCE,
         device=DEVICE, verbose=False,
     )
     epochs_run = len(hist["val_loss"])
     elapsed = time.time() - t0
-    print(f"   best val MSE: {best_val:.4f} | epochs run: {epochs_run} | {elapsed:.0f}s")
-    results.append({**cfg, "val_mse": best_val, "epochs_run": epochs_run})
+    print(f"   best val MSE: {best_val:.4f} | best epoch: {best_epoch} "
+          f"| epochs run: {epochs_run} | {elapsed:.0f}s")
+    results.append({**cfg, "val_mse": best_val,
+                    "best_epoch": best_epoch, "epochs_run": epochs_run})
 
 results_df = pd.DataFrame(results).sort_values("val_mse")
 results_df
@@ -2511,8 +2524,10 @@ final_model = lstm_model.LSTMForecaster(
     n_calendar=6,
 )
 
-# Retrain for `winner_epochs` epochs (no early stopping; use winner's epoch count).
-WINNER_EPOCHS = int(winner["epochs_run"])
+# Retrain for the BEST EPOCH count from the sweep, not the total epochs run.
+# `epochs_run` includes the patience-window of non-improving epochs after the
+# best validation loss — using it would overshoot the optimum.
+WINNER_EPOCHS = int(winner["best_epoch"])
 final_model = final_model.to(DEVICE)
 opt = torch.optim.Adam(final_model.parameters(), lr=LR)
 loss_fn = torch.nn.MSELoss()
@@ -2594,7 +2609,7 @@ with open("models/lstm_config.json", "w") as f:
         "num_layers":  int(winner["num_layers"]),
         "dropout":     float(winner["dropout"]),
         "n_calendar":  6,
-        "winner_epochs": WINNER_EPOCHS,
+        "winner_best_epoch": WINNER_EPOCHS,
     }, f, indent=2)
 
 # Overwrite the test predictions with the tuned model's output.
@@ -2665,7 +2680,7 @@ python -c "
 import json, torch
 from src.models.lstm_model import LSTMForecaster
 cfg = json.load(open('models/lstm_config.json'))
-m = LSTMForecaster(**{k:v for k,v in cfg.items() if k != 'winner_epochs'})
+m = LSTMForecaster(**{k:v for k,v in cfg.items() if k != 'winner_best_epoch'})
 m.load_state_dict(torch.load('models/lstm_final.pt', map_location='cpu'))
 m.eval()
 print('reload OK; param count:', sum(p.numel() for p in m.parameters()))
