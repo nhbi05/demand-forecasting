@@ -2200,12 +2200,12 @@ PATIENCE = 10
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"training on: {DEVICE}")
 
-trained_model, best_val, history = lstm_model.train_model(
+trained_model, best_val, best_epoch, history = lstm_model.train_model(
     model, train_loader, val_loader,
     epochs=EPOCHS, lr=LR, patience=PATIENCE,
     device=DEVICE, verbose=True,
 )
-print(f"\nbest val MSE: {best_val:.4f}")
+print(f"\nbest val MSE: {best_val:.4f} at epoch {best_epoch}")
 ```
 
 **Code cell — plot training curves:**
