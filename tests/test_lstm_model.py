@@ -116,3 +116,74 @@ def test_train_model_early_stops_when_val_does_not_improve():
 
     # With patience=0 and a divergent setup, training must stop well before 20.
     assert len(history["val_loss"]) < 20
+
+
+def test_predict_returns_array_with_correct_shape():
+    torch.manual_seed(0)
+    X_qty, X_cal, prod_idx, y = _dummy_arrays(n=6, lookback=5, horizon=3)
+    ds = lstm_model.LSTMDataset(X_qty, X_cal, prod_idx, y)
+    loader = DataLoader(ds, batch_size=2)
+
+    model = lstm_model.LSTMForecaster(
+        n_products=2, embed_dim=2, lookback=5, horizon=3,
+        hidden_size=4, num_layers=1, dropout=0.0,
+    )
+
+    preds = lstm_model.predict(model, loader)
+
+    assert preds.shape == (6, 3)
+    assert preds.dtype == np.float32
+
+
+def test_inverse_scale_predictions_roundtrip():
+    from sklearn.preprocessing import MinMaxScaler
+    sc_a = MinMaxScaler().fit(np.array([[0.0], [10.0]]))
+    sc_b = MinMaxScaler().fit(np.array([[0.0], [100.0]]))
+    scalers = {"a": sc_a, "b": sc_b}
+
+    # Two products' predictions in scaled space
+    preds_scaled = np.array([[0.5, 1.0], [0.5, 1.0]], dtype=np.float32)
+    item_ids = np.array(["a", "b"])
+
+    preds_real = lstm_model.inverse_scale_predictions(preds_scaled, item_ids, scalers)
+
+    # 'a' max=10 → 0.5→5, 1.0→10; 'b' max=100 → 0.5→50, 1.0→100
+    assert preds_real[0, 0] == pytest.approx(5.0)
+    assert preds_real[0, 1] == pytest.approx(10.0)
+    assert preds_real[1, 0] == pytest.approx(50.0)
+    assert preds_real[1, 1] == pytest.approx(100.0)
+
+
+def test_compute_metrics_zero_error_case():
+    preds = np.array([[1.0, 2.0], [3.0, 4.0]])
+    targets = np.array([[1.0, 2.0], [3.0, 4.0]])
+    m = lstm_model.compute_metrics(preds, targets)
+    assert m["rmse"] == pytest.approx(0.0)
+    assert m["mae"] == pytest.approx(0.0)
+    assert m["mape"] == pytest.approx(0.0)
+
+
+def test_compute_metrics_skips_zero_targets_for_mape():
+    preds = np.array([[10.0, 5.0]])
+    targets = np.array([[0.0, 5.0]])  # first target is 0 → skipped for MAPE
+    m = lstm_model.compute_metrics(preds, targets)
+    # MAPE only counts the second pair: |5-5|/5 = 0
+    assert m["mape"] == pytest.approx(0.0)
+
+
+def test_naive_baseline_repeats_last_observed_value():
+    past_qty = np.array([[1.0, 2.0, 3.0]])  # one example, lookback 3
+    horizon = 4
+    out = lstm_model.naive_baseline(past_qty, horizon)
+    assert out.shape == (1, 4)
+    assert np.allclose(out, 3.0)
+
+
+def test_seasonal_naive_baseline_uses_same_weekday_last_week():
+    # past 14 days: last 7 are days "8..14"
+    past_qty = np.arange(1, 15, dtype=float).reshape(1, 14)
+    horizon = 7
+    out = lstm_model.seasonal_naive_baseline(past_qty, horizon)
+    assert out.shape == (1, 7)
+    # The seasonal-naive forecast for the next 7 days copies the most recent 7.
+    assert np.allclose(out[0], np.arange(8, 15))
