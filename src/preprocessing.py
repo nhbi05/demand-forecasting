@@ -55,3 +55,23 @@ def cap_outliers(daily: pd.DataFrame, percentile: float = 99.5) -> pd.DataFrame:
     )
     out["quantity"] = np.minimum(out["quantity"], caps)
     return out
+
+
+def add_calendar_features(daily: pd.DataFrame) -> pd.DataFrame:
+    """Add cyclical sin/cos encodings of day-of-week, day-of-month, month.
+
+    Cyclical encoding tells the model that, e.g., Sunday (6) and Monday (0)
+    are adjacent — a plain integer encoding wouldn't.
+    """
+    out = daily.copy()
+    dow = out["date"].dt.dayofweek          # 0..6
+    dom = out["date"].dt.day                # 1..31
+    month = out["date"].dt.month            # 1..12
+
+    out["dow_sin"] = np.sin(2 * np.pi * dow / 7.0)
+    out["dow_cos"] = np.cos(2 * np.pi * dow / 7.0)
+    out["dom_sin"] = np.sin(2 * np.pi * (dom - 1) / 31.0)
+    out["dom_cos"] = np.cos(2 * np.pi * (dom - 1) / 31.0)
+    out["month_sin"] = np.sin(2 * np.pi * (month - 1) / 12.0)
+    out["month_cos"] = np.cos(2 * np.pi * (month - 1) / 12.0)
+    return out
