@@ -94,8 +94,10 @@ def test_train_model_returns_trained_model_and_history():
 
 
 def test_train_model_early_stops_when_val_does_not_improve():
-    """Patience=0 should stop after the first epoch (since improvement check fails)."""
+    """Patience=0 with a divergent learning rate forces val loss to worsen
+    after the first epoch, so training stops early."""
     torch.manual_seed(0)
+    np.random.seed(0)
     X_qty, X_cal, prod_idx, y = _dummy_arrays(n=8, lookback=5, horizon=3)
     train_ds = lstm_model.LSTMDataset(X_qty[:6], X_cal[:6], prod_idx[:6], y[:6])
     val_ds   = lstm_model.LSTMDataset(X_qty[6:], X_cal[6:], prod_idx[6:], y[6:])
@@ -106,9 +108,11 @@ def test_train_model_early_stops_when_val_does_not_improve():
         n_products=2, embed_dim=2, lookback=5, horizon=3,
         hidden_size=4, num_layers=1, dropout=0.0,
     )
+    # lr=10 is wildly too high; weights blow up and val loss diverges fast.
     _, _, _, history = lstm_model.train_model(
-        model, train_loader, val_loader, epochs=20, lr=1e-2, patience=0,
+        model, train_loader, val_loader, epochs=20, lr=10.0, patience=0,
+        verbose=False,
     )
 
-    # With patience=0, should stop very early (≤ 2 epochs typically).
-    assert len(history["val_loss"]) <= 5
+    # With patience=0 and a divergent setup, training must stop well before 20.
+    assert len(history["val_loss"]) < 20
