@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
 
 
 def load_raw_sales(csv_path: str = "sales.csv") -> pd.DataFrame:
@@ -106,3 +107,34 @@ def split_time_based(daily: pd.DataFrame, val_days: int = 60,
         "test_start":  dates[train_size + val_days].strftime("%Y-%m-%d"),
         "test_end":    dates[-1].strftime("%Y-%m-%d"),
     }
+
+
+def scale_per_product(daily: pd.DataFrame, train_end_date) -> tuple[pd.DataFrame, dict]:
+    """Fit a MinMaxScaler per product on data up to and including
+    `train_end_date`, then transform all data (including val and test).
+
+    Fitting on train-only prevents leakage: the scaler doesn't "see" future
+    values when computing min/max.
+
+    Returns:
+        (scaled_df, scalers) where scaled_df has a new column `quantity_scaled`
+        and scalers is `{item_id: MinMaxScaler}` for inverse-scaling later.
+    """
+    train_end_date = pd.to_datetime(train_end_date)
+    out = daily.copy().sort_values(["item_id", "date"]).reset_index(drop=True)
+    out["quantity_scaled"] = 0.0
+    scalers: dict = {}
+
+    for item_id, group in out.groupby("item_id"):
+        train_mask = group["date"] <= train_end_date
+        train_qty = group.loc[train_mask, "quantity"].values.reshape(-1, 1)
+        if len(train_qty) == 0:
+            raise ValueError(f"Product {item_id} has no training rows.")
+        scaler = MinMaxScaler()
+        scaler.fit(train_qty)
+        scalers[item_id] = scaler
+        out.loc[group.index, "quantity_scaled"] = scaler.transform(
+            group["quantity"].values.reshape(-1, 1)
+        ).flatten()
+
+    return out, scalers

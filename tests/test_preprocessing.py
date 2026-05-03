@@ -180,3 +180,42 @@ def test_split_time_based_rejects_too_few_days():
 
     with pytest.raises(ValueError):
         preprocessing.split_time_based(daily, val_days=60, test_frac=0.20)
+
+
+def test_scale_per_product_fits_on_train_only():
+    days = pd.date_range("2024-01-01", periods=10)
+    daily = pd.DataFrame({
+        "item_id": ["a"] * 10,
+        "date": days,
+        "quantity": list(range(10)),  # 0..9
+    })
+    train_end = pd.Timestamp("2024-01-05")  # train rows 0..4 → values 0..4
+
+    scaled, scalers = preprocessing.scale_per_product(daily, train_end)
+
+    # Train range = 0..4; min=0, max=4 → train values scale to 0..1
+    train_rows = scaled[scaled["date"] <= train_end]
+    assert train_rows["quantity_scaled"].min() == pytest.approx(0.0)
+    assert train_rows["quantity_scaled"].max() == pytest.approx(1.0)
+
+    # Post-train values 5..9 will scale > 1 (extrapolation), proving fit was train-only
+    post_train = scaled[scaled["date"] > train_end]
+    assert post_train["quantity_scaled"].min() > 1.0
+
+
+def test_scale_per_product_independent_per_product():
+    days = pd.date_range("2024-01-01", periods=4)
+    daily = pd.DataFrame({
+        "item_id": ["a"] * 4 + ["b"] * 4,
+        "date": list(days) * 2,
+        "quantity": [10, 20, 30, 40] + [100, 200, 300, 400],
+    })
+    train_end = pd.Timestamp("2024-01-04")  # all rows are train
+
+    scaled, scalers = preprocessing.scale_per_product(daily, train_end)
+
+    a_max = scaled[scaled["item_id"] == "a"]["quantity_scaled"].max()
+    b_max = scaled[scaled["item_id"] == "b"]["quantity_scaled"].max()
+    assert a_max == pytest.approx(1.0)
+    assert b_max == pytest.approx(1.0)
+    assert "a" in scalers and "b" in scalers
