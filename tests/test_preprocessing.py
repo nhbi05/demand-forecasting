@@ -147,3 +147,36 @@ def test_add_calendar_features_same_weekday_yields_same_dow_encoding():
 
     assert out["dow_sin"].iloc[0] == pytest.approx(out["dow_sin"].iloc[1])
     assert out["dow_cos"].iloc[0] == pytest.approx(out["dow_cos"].iloc[1])
+
+
+def test_split_time_based_returns_correct_boundaries():
+    days = pd.date_range("2022-08-28", "2024-09-26")  # 761 days
+    daily = pd.DataFrame({
+        "item_id": ["a"] * len(days),
+        "date": days,
+        "quantity": 1.0,
+    })
+
+    boundaries = preprocessing.split_time_based(daily, val_days=60, test_frac=0.20)
+
+    test_size = int(len(days) * 0.20)
+    train_plus_val = len(days) - test_size
+    train_size = train_plus_val - 60
+
+    assert boundaries["train_start"] == "2022-08-28"
+    assert boundaries["test_end"] == "2024-09-26"
+    assert pd.Timestamp(boundaries["train_end"]) == days[train_size - 1]
+    assert pd.Timestamp(boundaries["val_start"]) == days[train_size]
+    assert pd.Timestamp(boundaries["val_end"]) == days[train_size + 60 - 1]
+    assert pd.Timestamp(boundaries["test_start"]) == days[train_size + 60]
+
+
+def test_split_time_based_rejects_too_few_days():
+    daily = pd.DataFrame({
+        "item_id": ["a"] * 30,
+        "date": pd.date_range("2024-01-01", periods=30),
+        "quantity": 1.0,
+    })
+
+    with pytest.raises(ValueError):
+        preprocessing.split_time_based(daily, val_days=60, test_frac=0.20)
