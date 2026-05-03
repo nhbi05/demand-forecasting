@@ -121,3 +121,29 @@ def test_cap_outliers_does_not_cross_products():
 
     assert capped[capped["item_id"] == "a"]["quantity"].max() == 1.0
     assert capped[capped["item_id"] == "b"]["quantity"].max() == 1000.0
+
+
+def test_add_calendar_features_creates_six_columns():
+    daily = pd.DataFrame({
+        "item_id": ["a", "a"],
+        "date": pd.to_datetime(["2024-01-01", "2024-01-08"]),  # both Mondays
+        "quantity": [1.0, 1.0],
+    })
+
+    out = preprocessing.add_calendar_features(daily)
+
+    expected_cols = {"dow_sin", "dow_cos", "dom_sin", "dom_cos", "month_sin", "month_cos"}
+    assert expected_cols.issubset(out.columns)
+
+
+def test_add_calendar_features_same_weekday_yields_same_dow_encoding():
+    daily = pd.DataFrame({
+        "item_id": ["a", "a"],
+        "date": pd.to_datetime(["2024-01-01", "2024-01-08"]),  # both Mondays
+        "quantity": [1.0, 1.0],
+    })
+
+    out = preprocessing.add_calendar_features(daily)
+
+    assert out["dow_sin"].iloc[0] == pytest.approx(out["dow_sin"].iloc[1])
+    assert out["dow_cos"].iloc[0] == pytest.approx(out["dow_cos"].iloc[1])
