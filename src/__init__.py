@@ -1,9 +1,10 @@
 """
-Demand Forecasting System - Unified Ensemble Module
-All models work together to produce a single, unified forecast.
+Demand Forecasting — LSTM sub-project (user's scope).
+
+The `ensemble` module belongs to the team and is intentionally not
+imported here to avoid pulling in their dependencies during preprocessing.
 """
 
 from . import preprocessing
-from . import ensemble
 
-__version__ = "1.0.0"
+__version__ = "0.1.0"
