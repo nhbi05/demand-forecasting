@@ -138,3 +138,57 @@ def scale_per_product(daily: pd.DataFrame, train_end_date) -> tuple[pd.DataFrame
         ).flatten()
 
     return out, scalers
+
+
+CALENDAR_COLS = ["dow_sin", "dow_cos", "dom_sin", "dom_cos", "month_sin", "month_cos"]
+
+
+def create_sequences(
+    daily: pd.DataFrame,
+    product_to_idx: dict[str, int],
+    lookback: int = 60,
+    horizon: int = 30,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Generate sliding-window (input, target) examples per product.
+
+    For each product's contiguous time series, slide a window of size
+    `lookback` and predict the next `horizon` days. Stride = 1.
+
+    Args:
+        daily: must be sorted by (item_id, date) and contain `quantity_scaled`
+            plus the six CALENDAR_COLS.
+        product_to_idx: maps item_id (str) to integer index for embedding.
+        lookback: number of past days used as model input.
+        horizon: number of future days predicted.
+
+    Returns:
+        X_qty:    (N, lookback, 1)
+        X_cal:    (N, lookback, 6)
+        prod_idx: (N,)  int64
+        y:        (N, horizon)
+    """
+    df = daily.sort_values(["item_id", "date"]).reset_index(drop=True)
+
+    X_qty_list, X_cal_list, idx_list, y_list = [], [], [], []
+
+    for item_id, group in df.groupby("item_id"):
+        if item_id not in product_to_idx:
+            continue
+        qty = group["quantity_scaled"].values
+        cal = group[CALENDAR_COLS].values
+        n = len(qty)
+        max_start = n - lookback - horizon + 1
+        if max_start <= 0:
+            continue
+        pidx = product_to_idx[item_id]
+        for start in range(max_start):
+            X_qty_list.append(qty[start:start + lookback].reshape(-1, 1))
+            X_cal_list.append(cal[start:start + lookback])
+            idx_list.append(pidx)
+            y_list.append(qty[start + lookback:start + lookback + horizon])
+
+    X_qty = np.asarray(X_qty_list, dtype=np.float32)
+    X_cal = np.asarray(X_cal_list, dtype=np.float32)
+    prod_idx = np.asarray(idx_list, dtype=np.int64)
+    y = np.asarray(y_list, dtype=np.float32)
+    return X_qty, X_cal, prod_idx, y
