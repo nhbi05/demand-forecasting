@@ -21,7 +21,7 @@ def code(s):
 md("""# 02 - LSTM Demand Forecasting
 
 End-to-end PyTorch LSTM that predicts the next 30 days of daily demand
-for the top 50 products. Six sections, one per ML lifecycle stage:
+for the shared top-100 / 730-active-day product universe. Six sections, one per ML lifecycle stage:
 
 1. Data preparation
 2. EDA (LSTM-specific)
@@ -63,8 +63,10 @@ np.random.seed(42)""")
 
 code("""splits = preprocessing.prepare_data(
     csv_path="sales.csv",
-    n_products=50,
-    full_history_days=761,
+    n_products=100,
+    full_history_days=None,
+    min_active_days=730,
+    ranking_col="positive_quantity",
     val_days=60,
     test_frac=0.20,
     outdir="data/processed",
@@ -75,7 +77,7 @@ code("""daily = pd.read_csv("data/processed/daily.csv", parse_dates=["date"])
 with open("data/processed/scalers.pkl", "rb") as f:
     scalers = pickle.load(f)
 
-print(f"top-50 products kept: {daily['item_id'].nunique()}")
+print(f"selected products kept: {daily['item_id'].nunique()}")
 print(f"days per product:     {daily.groupby('item_id')['date'].nunique().min()}")
 print(f"split boundaries:     {splits}")
 daily.head()""")
@@ -83,7 +85,7 @@ daily.head()""")
 # ============== SECTION 2 ==============
 md("""## 2. EDA (LSTM-specific)
 
-Now that we have filtered to the top 50 products and added calendar features,
+Now that we have filtered to the shared product universe and added calendar features,
 we look at *this* dataset (not the raw 28k-product `sales.csv`) - what
 patterns will the LSTM need to learn?""")
 
@@ -103,7 +105,7 @@ code("""daily["dow"] = daily["date"].dt.dayofweek
 fig, ax = plt.subplots(figsize=(8, 4))
 sns.boxplot(data=daily, x="dow", y="quantity", ax=ax)
 ax.set_xticklabels(["Mon","Tue","Wed","Thu","Fri","Sat","Sun"])
-ax.set_title("Top-50 products: quantity by day-of-week")
+ax.set_title("Shared product universe: quantity by day-of-week")
 plt.show()""")
 
 code("""print("quantity_scaled - should be in [0, 1] for training rows:")
@@ -227,8 +229,8 @@ into a `Linear` layer that produces our 30-day forecast.""")
 
 md("""### Why an embedding for `product_idx`?
 
-We have 50 products. We could one-hot encode them (a 50-dim vector with
-49 zeros and a single 1) - but that wastes parameters and treats every
+We have one fixed shared product universe. We could one-hot encode product
+identity - but that wastes parameters and treats every
 product as equally distant from every other.
 
 An **embedding** is a small lookup table: each product gets its own
@@ -368,7 +370,7 @@ for item_id, idx in product_to_idx.items():
             "y_real":   series.loc[target_start:target_end - 1, "quantity"].values,
             "target_dates": series.loc[target_start:target_end - 1, "date"].values,
         })
-print(f"total eval windows: {len(eval_rows)} (expected {50*5} = 250)")""")
+print(f"total eval windows: {len(eval_rows)} (expected {N_PRODUCTS*5} = {N_PRODUCTS*5})")""")
 
 code("""X_qty_eval = np.stack([r["X_qty"]    for r in eval_rows]).astype(np.float32)
 X_cal_eval = np.stack([r["X_cal"]    for r in eval_rows]).astype(np.float32)
@@ -384,7 +386,7 @@ preds_scaled = lstm_model.predict(trained_model, eval_loader, device=DEVICE)
 preds_real   = lstm_model.inverse_scale_predictions(preds_scaled, item_ids_eval, scalers)
 preds_real   = np.clip(preds_real, 0.0, None)
 
-print("preds_real shape:", preds_real.shape, "  (expected (250, 30))")""")
+print("preds_real shape:", preds_real.shape, f"  (expected ({N_PRODUCTS*5}, {HORIZON}))")""")
 
 code("""m_lstm = lstm_model.compute_metrics(preds_real, y_eval_real)
 print("LSTM:", m_lstm)

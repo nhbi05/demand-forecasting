@@ -1,5 +1,11 @@
 # LSTM Demand Forecasting Implementation Plan
 
+> Historical v1 implementation plan. The team-wide product universe has since
+> been updated in [`docs/ensemble-contract.md`](../../ensemble-contract.md) to
+> top 100 products by total positive demand with at least 730 active sales days.
+> Use the ensemble contract as the current source of truth for product/date
+> alignment.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a PyTorch LSTM that forecasts the next 30 days of daily demand for the top-50 products from `sales.csv`, plus a framework-agnostic preprocessing pipeline the team's other models reuse.

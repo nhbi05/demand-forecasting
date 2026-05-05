@@ -1,5 +1,10 @@
 # LSTM Demand Forecasting — Design Spec
 
+> Historical v1 spec. The team-wide product universe has since been updated in
+> [`docs/ensemble-contract.md`](../../ensemble-contract.md) to top 100 products
+> by total positive demand with at least 730 active sales days. Use the ensemble
+> contract as the current source of truth for product/date alignment.
+
 **Date:** 2026-05-02
 **Owner:** the user (LSTM only)
 **Team scope (out of this spec):** RNN, Random Forest, Gaussian Process, ensemble integration

@@ -10,6 +10,8 @@ __pycache__/
 *.pyo
 *.egg-info/
 .pytest_cache/
+.test_tmp_preprocessing/
+.tmp/
 
 # Jupyter
 .ipynb_checkpoints/

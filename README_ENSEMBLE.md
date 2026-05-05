@@ -1,5 +1,10 @@
 # Demand Forecasting System - Unified Ensemble
 
+> Current source of truth: read `docs/ensemble-contract.md` before training or
+> editing model notebooks. The shared benchmark is top 100 products by total
+> positive demand with at least 730 active sales days; final prediction files
+> must align on `date + item_id`.
+
 A professional, production-ready demand forecasting system that combines **LSTM**, **RNN**, **Random Forest**, and **Gaussian Process** models into a unified ensemble for accurate predictions.
 
 ## 🎯 Key Features
