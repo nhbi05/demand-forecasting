@@ -102,8 +102,17 @@ def train_model(
     patience: int = 10,
     device: str = "cpu",
     verbose: bool = True,
+    weight_decay: float = 0.0,
+    loss_fn: torch.nn.Module | None = None,
 ):
-    """Train the LSTM with MSE loss, Adam, and early stopping on val loss.
+    """Train the LSTM with Adam + early stopping on val loss.
+
+    Args:
+        weight_decay: L2 regularization on Adam (default 0.0 — disabled).
+            Use 1e-4 for mild regularization that works well with this model.
+        loss_fn: torch loss module instance. Defaults to MSELoss. Pass
+            `torch.nn.SmoothL1Loss()` (Huber) or `torch.nn.L1Loss()` (MAE)
+            to be more robust to spike-day outliers.
 
     Returns:
         (best_model, best_val_loss, best_epoch, history)
@@ -113,8 +122,9 @@ def train_model(
     on train+val combined, otherwise you'll overshoot by the patience window.
     """
     model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    loss_fn = torch.nn.MSELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    if loss_fn is None:
+        loss_fn = torch.nn.MSELoss()
 
     best_val = float("inf")
     best_epoch = 0
