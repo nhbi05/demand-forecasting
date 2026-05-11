@@ -1,10 +1,9 @@
-"""
-Model implementations - All must output predictions with identical shape
-"""
+"""Model implementations.
 
-from . import lstm_model
-from . import rnn_model
-from . import random_forest_model
-from . import gaussian_model
+Empty by design: every other model module (rnn_model, random_forest_model,
+gaussian_model) currently still imports TensorFlow at module load time, which
+breaks if TF isn't installed. Each consumer should import the specific module
+they need, e.g.:
 
-__all__ = ['lstm_model', 'rnn_model', 'random_forest_model', 'gaussian_model']
+    from src.models.lstm_model import LSTMForecaster
+"""
