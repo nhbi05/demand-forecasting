@@ -46,17 +46,18 @@ md("""## 0. Environment setup (Colab)
 
 **Local runs:** skip this cell - it's a no-op outside Colab.
 
-**Colab runs:** this cell clones the repo, mounts your Google Drive, and links
-`sales.csv` and `data/processed/` from Drive into the cloned working tree. One
-prerequisite: upload these to Drive once at the path below.
+**Colab runs:** this cell clones the repo (fresh, fast working tree), mounts
+your Google Drive, and symlinks `sales.csv` + `data/processed/` from Drive
+into the clone. Prerequisite: the project is already on Drive at:
 
 ```
-MyDrive/demand-forecasting-data/
+MyDrive/demand-forecasting/
   sales.csv
-  processed/        <-- contents of data/processed/ (daily.csv, scalers.pkl, ...)
+  data/
+    processed/      <-- daily.csv, scalers.pkl, feature_columns.json, ...
 ```
 
-Edit `DRIVE_DATA_DIR` if you put them somewhere else.""")
+If your Drive layout is different, edit `DRIVE_DATA_DIR` below.""")
 
 code("""# === Colab bootstrap (no-op when running locally) ===
 import os, sys, subprocess
@@ -72,7 +73,8 @@ if _in_colab():
     REPO_URL = "https://github.com/nhbi05/demand-forecasting.git"
     BRANCH = "feature/lstm-design"
     REPO_DIR = "/content/demand-forecasting"
-    DRIVE_DATA_DIR = "/content/drive/MyDrive/demand-forecasting-data"
+    # Points at the project folder on Drive (containing sales.csv + data/).
+    DRIVE_DATA_DIR = "/content/drive/MyDrive/demand-forecasting"
 
     if not os.path.exists(REPO_DIR):
         subprocess.run(
@@ -86,7 +88,7 @@ if _in_colab():
     drive.mount("/content/drive")
 
     src_csv = os.path.join(DRIVE_DATA_DIR, "sales.csv")
-    src_processed = os.path.join(DRIVE_DATA_DIR, "processed")
+    src_processed = os.path.join(DRIVE_DATA_DIR, "data", "processed")
     dst_csv = os.path.join(REPO_DIR, "sales.csv")
     dst_processed = os.path.join(REPO_DIR, "data", "processed")
     os.makedirs(os.path.join(REPO_DIR, "data"), exist_ok=True)
