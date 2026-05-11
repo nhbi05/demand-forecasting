@@ -1,5 +1,5 @@
 # Raw data — too large for git
-sales.csv
+data/sales.csv
 data/processed/
 data/predictions/
 models/*.pt
