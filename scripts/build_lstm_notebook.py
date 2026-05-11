@@ -41,6 +41,74 @@ This is v2 - improvements over v1:
 
 Ensemble contract: predictions saved to `data/predictions/lstm_test_predictions.csv` with the canonical schema `date,item_id,predicted_quantity,actual_quantity`. Same product list and test window as every other ensemble model.""")
 
+# ============== Colab bootstrap ==============
+md("""## 0. Environment setup (Colab)
+
+**Local runs:** skip this cell - it's a no-op outside Colab.
+
+**Colab runs:** this cell clones the repo, mounts your Google Drive, and links
+`sales.csv` and `data/processed/` from Drive into the cloned working tree. One
+prerequisite: upload these to Drive once at the path below.
+
+```
+MyDrive/demand-forecasting-data/
+  sales.csv
+  processed/        <-- contents of data/processed/ (daily.csv, scalers.pkl, ...)
+```
+
+Edit `DRIVE_DATA_DIR` if you put them somewhere else.""")
+
+code("""# === Colab bootstrap (no-op when running locally) ===
+import os, sys, subprocess
+
+def _in_colab():
+    try:
+        import google.colab  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+if _in_colab():
+    REPO_URL = "https://github.com/nhbi05/demand-forecasting.git"
+    BRANCH = "feature/lstm-design"
+    REPO_DIR = "/content/demand-forecasting"
+    DRIVE_DATA_DIR = "/content/drive/MyDrive/demand-forecasting-data"
+
+    if not os.path.exists(REPO_DIR):
+        subprocess.run(
+            ["git", "clone", "--branch", BRANCH, "--depth", "1", REPO_URL, REPO_DIR],
+            check=True,
+        )
+    else:
+        subprocess.run(["git", "-C", REPO_DIR, "pull", "--ff-only"], check=False)
+
+    from google.colab import drive  # noqa: E402
+    drive.mount("/content/drive")
+
+    src_csv = os.path.join(DRIVE_DATA_DIR, "sales.csv")
+    src_processed = os.path.join(DRIVE_DATA_DIR, "processed")
+    dst_csv = os.path.join(REPO_DIR, "sales.csv")
+    dst_processed = os.path.join(REPO_DIR, "data", "processed")
+    os.makedirs(os.path.join(REPO_DIR, "data"), exist_ok=True)
+
+    for src, dst in [(src_csv, dst_csv), (src_processed, dst_processed)]:
+        if not os.path.exists(src):
+            raise FileNotFoundError(
+                f"Expected {src} on Drive. Upload it (or fix DRIVE_DATA_DIR).")
+        if os.path.lexists(dst) and not os.path.samefile(dst, src):
+            if os.path.islink(dst) or os.path.isfile(dst):
+                os.remove(dst)
+        if not os.path.lexists(dst):
+            os.symlink(src, dst)
+
+    os.chdir(REPO_DIR)
+    print(f"Repo:       {REPO_DIR}")
+    print(f"Data root:  {DRIVE_DATA_DIR}")
+    print(f"sales.csv:  {os.path.exists(dst_csv)}")
+    print(f"processed:  {os.path.exists(dst_processed)}")
+else:
+    print("Not running in Colab - skipping bootstrap.")""")
+
 # ============== SECTION 1 ==============
 md("""## 1. Data preparation
 
@@ -48,10 +116,11 @@ Loads the shared artifacts written by `src.preprocessing.prepare_data()`.
 Regenerates them if they don't exist yet.""")
 
 code("""import sys, os
-# Make project root importable when this notebook is run from notebooks/
-sys.path.insert(0, os.path.abspath(os.path.join(os.getcwd(), "..")))
+# Ensure CWD is the repo root and that the root is on sys.path so `from src
+# import ...` works whether launched from notebooks/, repo root, or Colab.
 if os.path.basename(os.getcwd()) == "notebooks":
-    os.chdir(os.path.abspath(os.path.join(os.getcwd(), "..")))
+    os.chdir("..")
+sys.path.insert(0, os.getcwd())
 
 import json
 import pickle
