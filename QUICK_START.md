@@ -2,6 +2,11 @@
 
 ## ✅ PROJECT SUCCESSFULLY CREATED
 
+> Current source of truth: read `docs/ensemble-contract.md` before training or
+> editing model notebooks. The shared benchmark is top 100 products by total
+> positive demand with at least 730 active sales days; final prediction files
+> must align on `date + item_id`.
+
 Your professional demand forecasting system with unified ensemble architecture is ready!
 
 ---
