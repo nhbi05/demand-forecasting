@@ -1,3 +1,10 @@
+# Raw data — too large for git
+data/sales.csv
+data/processed/
+data/predictions/
+models/*.pt
+
+# Python
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
