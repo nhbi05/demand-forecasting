@@ -1,17 +1,26 @@
-"""One-time builder for notebooks/02_LSTM.ipynb (v2).
+"""One-time builder for notebooks/02_LSTM.ipynb (v4).
 
 This script regenerates 02_LSTM.ipynb against the shared preprocessing
 contract. Run: python scripts/build_lstm_notebook.py
 
-v2 differences from v1:
-  - Loads canonical artifacts via preprocessing.load_artifacts()
-  - Uses the full DEFAULT_SHARED_FEATURE_COLS (14 features incl. price,
-    transaction_count, returns, etc.) — not just calendar + quantity
-  - Trains against seasonal-naive residuals: predict (actual - seasonal_naive),
-    add the baseline back at inference. Forces the model to learn what
-    seasonal-naive cannot
-  - Regularization: dropout 0.3, embed_dim 4, weight_decay 1e-4, hidden 64
-  - Always reports naive + seasonal-naive baselines
+v4 differences from v3:
+  Seasonal-naive beat v3 because the LSTM had to extract the weekly-lag
+  signal from 60 timesteps of raw X_qty through a 4-dim product embedding.
+  v4 gives the model that signal directly as features:
+    - rolling_7_scaled   - 7-day rolling mean of quantity_scaled per item_id
+    - rolling_30_scaled  - 30-day rolling mean (trend / level)
+    - lag_7_scaled       - quantity_scaled shifted 7 days (the seasonal-naive
+                            prediction as an input feature)
+  Final feature count: 15 (was 12 in v3).
+
+  These are conceptually the LSTM-friendly version of ETS's level / trend /
+  season decomposition. The model can default to using lag_7 (and thus be at
+  least as good as seasonal-naive on weeks where nothing else matters) and
+  deviate when other inputs (price, transactions, etc.) warrant it.
+
+  Everything else is unchanged from v3: top-100 universe, direct prediction,
+  Huber loss, patience 5, hidden 64, layers 2, dropout 0.3, embed 4,
+  weight_decay 1e-4, lookback 60, horizon 30.
 """
 
 import nbformat as nbf
@@ -28,16 +37,21 @@ def code(s):
 
 
 # ============== Title ==============
-md("""# 02 - LSTM Demand Forecasting (v2)
+md("""# 02 - LSTM Demand Forecasting (v4)
 
 End-to-end PyTorch LSTM on the shared **top-100 / 730-active-day** universe.
 
-This is v2 - improvements over v1:
+v4 targets the single weakness v3 couldn't close: **the LSTM had no direct way to see the weekly-lag signal that seasonal-naive uses.** v3 had to extract it from 60 timesteps of raw `X_qty` through a 4-dim product embedding. v4 hands the model that signal explicitly as features.
 
-1. **Richer features** - quantity, returns, price, sum_total, transaction_count, store_count, had_sales, plus calendar (14 total)
-2. **Residual training** - model predicts `actual - seasonal_naive`, not `actual`
-3. **Regularization** - dropout 0.3, embed 4, weight_decay 1e-4
-4. **Always reports baselines** - naive + seasonal-naive comparison
+**What changed from v3:**
+
+1. **Three engineered features added** (15 total feature columns, was 12):
+   - `rolling_7_scaled` - 7-day rolling mean of `quantity_scaled` per product (smoothed level)
+   - `rolling_30_scaled` - 30-day rolling mean (medium-term trend; attacks the -8.16 bias from v3)
+   - `lag_7_scaled` - `quantity_scaled` shifted 7 days (same-weekday-last-week; the seasonal-naive prediction as an input feature)
+2. These are conceptually the LSTM-friendly version of ETS's level/trend/season decomposition. The model can default to `lag_7` (matching seasonal-naive) and deviate when other inputs warrant it.
+
+**Unchanged from v3:** direct prediction, Huber loss, patience 5, top-100 universe, hidden 64, layers 2, dropout 0.3, embed 4, weight_decay 1e-4.
 
 Ensemble contract: predictions saved to `data/predictions/lstm_test_predictions.csv` with the canonical schema `date,item_id,predicted_quantity,actual_quantity`. Same product list and test window as every other ensemble model.""")
 
@@ -46,17 +60,18 @@ md("""## 0. Environment setup (Colab)
 
 **Local runs:** skip this cell - it's a no-op outside Colab.
 
-**Colab runs:** this cell clones the repo, mounts your Google Drive, and links
-`sales.csv` and `data/processed/` from Drive into the cloned working tree. One
-prerequisite: upload these to Drive once at the path below.
+**Colab runs:** this cell clones the repo (fresh, fast working tree), mounts
+your Google Drive, and symlinks `sales.csv` + `data/processed/` from Drive
+into the clone. Prerequisite: the project is already on Drive at:
 
 ```
-MyDrive/demand-forecasting-data/
+MyDrive/demand-forecasting/
   sales.csv
-  processed/        <-- contents of data/processed/ (daily.csv, scalers.pkl, ...)
+  data/
+    processed/      <-- daily.csv, scalers.pkl, feature_columns.json, ...
 ```
 
-Edit `DRIVE_DATA_DIR` if you put them somewhere else.""")
+If your Drive layout is different, edit `DRIVE_DATA_DIR` below.""")
 
 code("""# === Colab bootstrap (no-op when running locally) ===
 import os, sys, subprocess
@@ -72,7 +87,8 @@ if _in_colab():
     REPO_URL = "https://github.com/nhbi05/demand-forecasting.git"
     BRANCH = "feature/lstm-design"
     REPO_DIR = "/content/demand-forecasting"
-    DRIVE_DATA_DIR = "/content/drive/MyDrive/demand-forecasting-data"
+    # Points at the project folder on Drive (containing sales.csv + data/).
+    DRIVE_DATA_DIR = "/content/drive/MyDrive/demand-forecasting"
 
     if not os.path.exists(REPO_DIR):
         subprocess.run(
@@ -86,7 +102,7 @@ if _in_colab():
     drive.mount("/content/drive")
 
     src_csv = os.path.join(DRIVE_DATA_DIR, "sales.csv")
-    src_processed = os.path.join(DRIVE_DATA_DIR, "processed")
+    src_processed = os.path.join(DRIVE_DATA_DIR, "data", "processed")
     dst_csv = os.path.join(REPO_DIR, "sales.csv")
     dst_processed = os.path.join(REPO_DIR, "data", "processed")
     os.makedirs(os.path.join(REPO_DIR, "data"), exist_ok=True)
@@ -171,8 +187,8 @@ for col in feature_columns['shared_default']:
 # ============== SECTION 2 ==============
 md("""## 2. EDA (LSTM-specific)
 
-Quick checks on the v2 dataset - top 100 products instead of 50, and the
-new feature columns we're about to feed into the model.""")
+Quick checks on the dataset - top 100 products and the scaled feature
+ranges in the training period.""")
 
 code("""totals = daily.groupby("item_id")["quantity"].sum().sort_values(ascending=False)
 representatives = [
@@ -212,13 +228,33 @@ md("""## 3. Feature engineering
 
 Three things happen here:
 
-1. Build sequences with the **richer 14-feature input** instead of just calendar + quantity.
-2. Compute the **seasonal-naive baseline for every horizon position** so we can derive residual targets.
-3. Wrap everything in DataLoaders.""")
+1. **Engineered features**: compute `rolling_7_scaled`, `rolling_30_scaled`, and `lag_7_scaled` on `daily` (per item_id). These let the LSTM see level, trend, and weekly-lag signal directly instead of extracting them through hidden state.
+2. Build sequences with the **15-feature input** (12 from the shared contract minus 2 dead/duplicate + 3 new engineered).
+3. Wrap everything in DataLoaders.
+
+The model output is the direct scaled quantity for the next 30 days. We inverse-scale at evaluation time.""")
+
+code("""# v4: engineered features for level / trend / weekly-lag signal.
+# Compute on the full daily DataFrame per item_id before slicing.
+daily = daily.sort_values(["item_id", "date"]).reset_index(drop=True)
+
+g = daily.groupby("item_id", sort=False)["quantity_scaled"]
+daily["rolling_7_scaled"]  = g.transform(lambda s: s.rolling(7,  min_periods=1).mean())
+daily["rolling_30_scaled"] = g.transform(lambda s: s.rolling(30, min_periods=1).mean())
+daily["lag_7_scaled"]      = g.transform(lambda s: s.shift(7))
+# First 7 days per product have no lag-7. Fall back to the rolling-7 mean
+# (which is defined from day 1 via min_periods=1) so we don't introduce NaNs.
+daily["lag_7_scaled"] = daily["lag_7_scaled"].fillna(daily["rolling_7_scaled"])
+
+ENGINEERED_FEATURES = ["rolling_7_scaled", "rolling_30_scaled", "lag_7_scaled"]
+print("v4 engineered features (per item_id, computed on quantity_scaled):")
+print(daily[ENGINEERED_FEATURES].describe().loc[["min", "max", "mean", "std"]].T.round(4))
+print()
+print(f"NaNs introduced: {int(daily[ENGINEERED_FEATURES].isna().sum().sum())} (should be 0)")""")
 
 code("""LOOKBACK = 60
 HORIZON = 30
-PERIOD = 7   # weekly seasonality
+PERIOD = 7   # weekly seasonality (used for the seasonal-naive baseline only)
 BATCH_SIZE = 64
 
 slices = preprocessing.slice_by_split(daily, splits, lookback_days=LOOKBACK)
@@ -226,13 +262,19 @@ train_slice, val_slice, test_slice = slices["train"], slices["val"], slices["tes
 
 product_to_idx = {p: i for i, p in enumerate(sorted(selected_products))}
 N_PRODUCTS = len(product_to_idx)
-SHARED_FEATURES = feature_columns["shared_default"]
+
+# v4 feature set: shared_default minus the 2 dead/duplicate columns,
+# plus the 3 engineered ones. Contract output is unchanged - we just
+# choose which subset *this* model consumes as input.
+DROPPED_FEATURES = {"returns_quantity_scaled", "positive_quantity_scaled"}
+SHARED_FEATURES = [c for c in feature_columns["shared_default"]
+                   if c not in DROPPED_FEATURES] + ENGINEERED_FEATURES
 N_FEATURES = len(SHARED_FEATURES)
 
 print(f"train slice: {len(train_slice):,} rows ({train_slice['date'].min()} -> {train_slice['date'].max()})")
 print(f"val slice:   {len(val_slice):,} rows ({val_slice['date'].min()} -> {val_slice['date'].max()})")
 print(f"test slice:  {len(test_slice):,} rows ({test_slice['date'].min()} -> {test_slice['date'].max()})")
-print(f"input feature width per timestep: {N_FEATURES}")""")
+print(f"using {N_FEATURES} features: {SHARED_FEATURES}")""")
 
 code("""X_qty_tr, X_feat_tr, idx_tr, y_tr = preprocessing.create_sequences(
     train_slice, product_to_idx,
@@ -257,31 +299,13 @@ print(f"train windows: X_qty {X_qty_tr.shape}, X_feat {X_feat_tr.shape}, y {y_tr
 print(f"val windows:   X_qty {X_qty_va.shape}, X_feat {X_feat_va.shape}, y {y_va.shape}")
 print(f"test windows:  X_qty {X_qty_te.shape}, X_feat {X_feat_te.shape}, y {y_te.shape}")""")
 
-code("""# Seasonal-naive baseline per (window, horizon-day): repeat the last 7 days of input.
-# Same definition as lstm_model.seasonal_naive_baseline().
-def make_seasonal_baseline(X_qty, horizon=HORIZON, period=PERIOD):
-    baselines = np.zeros((X_qty.shape[0], horizon), dtype=np.float32)
-    for h in range(horizon):
-        baselines[:, h] = X_qty[:, -period + (h % period), 0]
-    return baselines
+code("""# Quick diagnostic: training target distribution.
+print(f"y_scaled target - mean {y_tr.mean():.4f}, std {y_tr.std():.4f}, "
+      f"min {y_tr.min():.4f}, max {y_tr.max():.4f}")""")
 
-seasonal_tr = make_seasonal_baseline(X_qty_tr)
-seasonal_va = make_seasonal_baseline(X_qty_va)
-seasonal_te = make_seasonal_baseline(X_qty_te)
-
-y_residual_tr = (y_tr - seasonal_tr).astype(np.float32)
-y_residual_va = (y_va - seasonal_va).astype(np.float32)
-y_residual_te = (y_te - seasonal_te).astype(np.float32)
-
-print(f"y absolute target - mean {y_tr.mean():.4f}, std {y_tr.std():.4f}")
-print(f"y residual target - mean {y_residual_tr.mean():.4f}, std {y_residual_tr.std():.4f}")
-print()
-print("If residual std << absolute std, seasonal-naive is doing most of the work")
-print("and the LSTM only has to model the leftover signal.")""")
-
-code("""train_ds = lstm_model.LSTMDataset(X_qty_tr, X_feat_tr, idx_tr, y_residual_tr)
-val_ds   = lstm_model.LSTMDataset(X_qty_va, X_feat_va, idx_va, y_residual_va)
-test_ds  = lstm_model.LSTMDataset(X_qty_te, X_feat_te, idx_te, y_residual_te)
+code("""train_ds = lstm_model.LSTMDataset(X_qty_tr, X_feat_tr, idx_tr, y_tr)
+val_ds   = lstm_model.LSTMDataset(X_qty_va, X_feat_va, idx_va, y_va)
+test_ds  = lstm_model.LSTMDataset(X_qty_te, X_feat_te, idx_te, y_te)
 
 train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
 val_loader   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False)
@@ -294,26 +318,23 @@ print(f"test batches:  {len(test_loader)}")""")
 # ============== SECTION 4 ==============
 md("""## 4. Model selection & training
 
-Same `LSTMForecaster` architecture but with v2 hyperparameters tuned for
-the new setup:
+Same `LSTMForecaster` architecture as v3 with the v4 feature count:
 
-- `embed_dim = 4` (was 8) - less memorization capacity
-- `hidden_size = 64` (unchanged)
-- `dropout = 0.3` (was 0.2)
-- `weight_decay = 1e-4` (NEW - L2 reg, not used in v1)
-- `n_calendar = 14` (the 14 shared feature columns, was 6 just calendar)
+- `n_calendar = 15` (12 shared columns minus 2 dead/duplicate + 3 engineered)
+- `embed_dim = 4`, `hidden_size = 64`, `num_layers = 2`
+- `dropout = 0.3`, `weight_decay = 1e-4`
+- `SmoothL1Loss` (Huber), patience 5
 
-Loss is MSE on the residual target. The model output is the predicted
-residual; we add the seasonal baseline back at inference.""")
+The target is `y_scaled` directly; we inverse-scale predictions at evaluation.""")
 
 code("""HIDDEN_SIZE = 64
 NUM_LAYERS = 2
-DROPOUT = 0.3              # v2: stronger regularization
-EMBED_DIM = 4              # v2: smaller, less overfit-prone
-WEIGHT_DECAY = 1e-4        # v2: L2 regularization
+DROPOUT = 0.3
+EMBED_DIM = 4
+WEIGHT_DECAY = 1e-4
 EPOCHS = 100
 LR = 1e-3
-PATIENCE = 10
+PATIENCE = 5               # v3: tighter than v2's 10
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"training on: {DEVICE}")
 
@@ -335,16 +356,17 @@ code("""trained_model, best_val, best_epoch, history = lstm_model.train_model(
     model, train_loader, val_loader,
     epochs=EPOCHS, lr=LR, patience=PATIENCE,
     weight_decay=WEIGHT_DECAY,
+    loss_fn=torch.nn.SmoothL1Loss(),   # v3: Huber instead of MSE
     device=DEVICE, verbose=True,
 )
 print()
-print(f"best val MSE (on residual target): {best_val:.6f} at epoch {best_epoch}")""")
+print(f"best val Huber loss: {best_val:.6f} at epoch {best_epoch}")""")
 
 code("""fig, ax = plt.subplots(figsize=(10, 4))
 ax.plot(history["train_loss"], label="train")
 ax.plot(history["val_loss"], label="val")
-ax.set_xlabel("epoch"); ax.set_ylabel("MSE on residual")
-ax.set_title("v2 training curve (residual target, regularized)")
+ax.set_xlabel("epoch"); ax.set_ylabel("Huber loss")
+ax.set_title("v4 training curve (direct prediction + engineered features, Huber loss)")
 ax.legend(); plt.show()""")
 
 # ============== SECTION 5 ==============
@@ -352,11 +374,10 @@ md("""## 5. Evaluation
 
 Five non-overlapping 30-day test windows per product. For each window:
 
-1. Get the model's predicted **residual** (output is in scaled-residual space).
-2. Add the seasonal-naive baseline (also in scaled space) to recover absolute scaled prediction.
-3. Inverse-scale to real units.
-4. Clip at 0 (no negative demand).
-5. Compute metrics and compare against naive + seasonal-naive baselines.""")
+1. Run the model. Output is in **scaled** space directly (no residual reconstruction).
+2. Inverse-scale to real units, per product.
+3. Clip at 0 (no negative demand).
+4. Compute metrics and compare against naive + seasonal-naive baselines.""")
 
 code("""test_start = pd.Timestamp(splits["test_start"])
 test_end = pd.Timestamp(splits["test_end"])
@@ -394,15 +415,9 @@ y_eval_scaled = np.stack([r["y_scaled"] for r in eval_rows]).astype(np.float32)
 y_eval_real   = np.stack([r["y_real"]   for r in eval_rows]).astype(np.float32)
 item_ids_eval = np.array([r["item_id"] for r in eval_rows])
 
-seasonal_eval = make_seasonal_baseline(X_qty_eval)
-y_residual_eval = y_eval_scaled - seasonal_eval
-
-eval_ds_for_model = lstm_model.LSTMDataset(X_qty_eval, X_feat_eval, idx_eval, y_residual_eval)
+eval_ds_for_model = lstm_model.LSTMDataset(X_qty_eval, X_feat_eval, idx_eval, y_eval_scaled)
 eval_loader = DataLoader(eval_ds_for_model, batch_size=BATCH_SIZE, shuffle=False)
-preds_residual_scaled = lstm_model.predict(trained_model, eval_loader, device=DEVICE)
-
-# Add seasonal baseline back to recover absolute scaled prediction
-preds_scaled = preds_residual_scaled + seasonal_eval
+preds_scaled = lstm_model.predict(trained_model, eval_loader, device=DEVICE)
 
 preds_real = lstm_model.inverse_scale_predictions(preds_scaled, item_ids_eval, scalers)
 preds_real = np.clip(preds_real, 0.0, None)
@@ -427,10 +442,12 @@ print(f"{'Model':<20} {'RMSE':>10} {'MAE':>10} {'MAPE':>10}")
 print("-" * 55)
 print(f"{'Naive':<20} {m_naive['rmse']:>10.2f} {m_naive['mae']:>10.2f} {m_naive['mape']:>9.2f}%")
 print(f"{'Seasonal-naive':<20} {m_seas['rmse']:>10.2f} {m_seas['mae']:>10.2f} {m_seas['mape']:>9.2f}%")
-print(f"{'LSTM v2':<20} {m_lstm['rmse']:>10.2f} {m_lstm['mae']:>10.2f} {m_lstm['mape']:>9.2f}%")
+print(f"{'LSTM v4':<20} {m_lstm['rmse']:>10.2f} {m_lstm['mae']:>10.2f} {m_lstm['mape']:>9.2f}%")
 print()
-print("v1 reference (top-50, calendar-only features, no residual):")
-print(f"{'  LSTM v1':<20} {97.97:>10.2f} {47.10:>10.2f} {24.08:>9.2f}%")""")
+print("Historical reference points (different setups, NOT apples-to-apples):")
+print(f"{'  LSTM v1 (top-50)':<20} {97.97:>10.2f} {47.10:>10.2f} {24.08:>9.2f}%")
+print(f"{'  LSTM v2 (residual)':<20} {167.63:>10.2f} {50.24:>10.2f} {34.59:>9.2f}%")
+print(f"{'  LSTM v3 (12 feat)':<20} {63.70:>10.2f} {33.33:>10.2f} {34.25:>9.2f}%")""")
 
 code("""plot_items = list(representatives) + [list(product_to_idx)[10]]
 fig, axes = plt.subplots(len(plot_items), 1, figsize=(12, 9), sharex=False)
@@ -439,7 +456,7 @@ for ax, item_id in zip(axes, plot_items):
     actuals = np.concatenate([r["y_real"] for r in eval_rows if r["item_id"] == item_id])
     preds   = np.concatenate(preds_real[mask])
     ax.plot(actuals, label="actual")
-    ax.plot(preds, label="LSTM v2", linestyle="--")
+    ax.plot(preds, label="LSTM v4", linestyle="--")
     ax.set_title(f"item {item_id}")
     ax.legend()
 plt.tight_layout(); plt.show()""")
@@ -448,7 +465,7 @@ code("""residuals_real = (preds_real - y_eval_real).flatten()
 fig, axes = plt.subplots(1, 2, figsize=(14, 4))
 
 sns.histplot(residuals_real, bins=80, ax=axes[0])
-axes[0].set_title("v2 residuals (predicted - actual)")
+axes[0].set_title("v4 residuals (predicted - actual)")
 axes[0].axvline(0, color="black", linestyle=":")
 axes[0].set_xlabel("residual")
 
@@ -456,7 +473,7 @@ per_day_rmse = np.sqrt(((preds_real - y_eval_real) ** 2).mean(axis=0))
 axes[1].plot(np.arange(1, HORIZON + 1), per_day_rmse, marker="o")
 axes[1].set_xlabel("forecast horizon (days ahead)")
 axes[1].set_ylabel("RMSE")
-axes[1].set_title("v2 error growth across horizon")
+axes[1].set_title("v4 error growth across horizon")
 
 plt.tight_layout(); plt.show()
 print(f"residual mean: {residuals_real.mean():.3f} (~ 0 = unbiased)")""")
@@ -482,15 +499,14 @@ print(f"products: {predictions_df['item_id'].nunique()}, "
 # ============== SECTION 6 ==============
 md("""## 6. Save final model
 
-For v2 the regularized run is the final model. Skip the grid search - it
-was the v1 path. If you want to sweep `dropout`, `embed_dim`, or
-`weight_decay`, do that as a follow-up experiment, not in this notebook.""")
+Save the trained weights and a config snapshot. The config lists the exact
+feature set and hyperparameters so the artifacts are self-describing.""")
 
 code("""Path("models").mkdir(exist_ok=True)
 torch.save(trained_model.state_dict(), "models/lstm_final.pt")
 with open("models/lstm_config.json", "w") as f:
     json.dump({
-        "version": "v2",
+        "version": "v4",
         "n_products": N_PRODUCTS,
         "embed_dim": EMBED_DIM,
         "lookback": LOOKBACK,
@@ -501,22 +517,30 @@ with open("models/lstm_config.json", "w") as f:
         "weight_decay": WEIGHT_DECAY,
         "n_calendar": N_FEATURES,
         "feature_cols": SHARED_FEATURES,
-        "target_mode": "residual_against_seasonal_naive",
-        "period": PERIOD,
+        "dropped_from_shared_default": sorted(DROPPED_FEATURES),
+        "engineered_features": ENGINEERED_FEATURES,
+        "target_mode": "direct_scaled_quantity",
+        "loss": "SmoothL1Loss",
+        "patience": PATIENCE,
         "best_epoch": int(best_epoch),
         "test_metrics": m_lstm,
         "baselines": {"naive": m_naive, "seasonal_naive": m_seas},
     }, f, indent=2)
 print("saved models/lstm_final.pt and models/lstm_config.json")""")
 
-md("""### Notes on the v2 result
+md("""### Reading the v4 results
 
-When interpreting the metrics above:
+What to look for in the metric table above:
 
-- The model trained on residuals - its raw output is *not* a demand prediction; it's the *correction* to add on top of seasonal-naive. The reconstruction (`prediction = seasonal_baseline + model_output`) happens at inference.
-- If `LSTM v2` RMSE / MAE is below `Seasonal-naive`, the LSTM is genuinely adding signal beyond weekly seasonality. That was the goal.
-- If the LSTM is now WORSE than seasonal-naive, the model is hurting more than it's helping - try `weight_decay=1e-3`, `dropout=0.4`, or revert to MSE on absolute targets.
-- v1 numbers (top-50 products, calendar-only features, no residual): RMSE 97.97, MAE 47.10, MAPE 24.08%. v2 results are NOT directly comparable because the product universe and feature set are both different, but the relative position to seasonal-naive *is* the right comparison.""")
+- **Beat seasonal-naive on RMSE.** v4 has `lag_7_scaled` as an input feature - it's seasonal-naive embedded into the LSTM. The model can default to "trust lag_7" when nothing else matters and should at least tie. If v4 still loses, the model is failing to use the feature it has direct access to, which would point to deeper architecture/training issues.
+- **Residual mean near 0** (was -8.16 in v3). The `rolling_30_scaled` feature gives the model explicit trend/level signal. If bias persists, the scaler version warning or test-period growth trend is the cause.
+- **Per-horizon RMSE growth is gentle.** Steep growth = model is anchoring on the input window. v4's engineered features should help more on the later horizon days.
+
+If v4 still doesn't beat seasonal-naive, the next moves (in order):
+
+1. **Switch target to `log(quantity + 1)`** - kills the scale-amplification problem where small scaled biases become large real-unit biases for high-volume products.
+2. **Per-product clustering** - 100 products with one global model may be too coarse. Group similar products and train one model per cluster.
+3. **Architecture upgrade** - bidirectional LSTM or attention head over the encoded sequence.""")
 
 
 def main():
