@@ -118,6 +118,35 @@ def test_train_model_early_stops_when_val_does_not_improve():
     assert len(history["val_loss"]) < 20
 
 
+def test_train_model_accepts_weight_decay_and_custom_loss():
+    """v2 knobs: weight_decay (L2 reg) and a swap-in loss function."""
+    torch.manual_seed(0)
+    np.random.seed(0)
+    X_qty, X_cal, prod_idx, y = _dummy_arrays(n=16, lookback=5, horizon=3)
+    train_ds = lstm_model.LSTMDataset(X_qty[:12], X_cal[:12], prod_idx[:12], y[:12])
+    val_ds   = lstm_model.LSTMDataset(X_qty[12:], X_cal[12:], prod_idx[12:], y[12:])
+    train_loader = DataLoader(train_ds, batch_size=4, shuffle=True)
+    val_loader   = DataLoader(val_ds,   batch_size=4)
+
+    model = lstm_model.LSTMForecaster(
+        n_products=2, embed_dim=4, lookback=5, horizon=3,
+        hidden_size=8, num_layers=1, dropout=0.0,
+    )
+
+    # Use Huber loss + weight decay; just confirm it runs and returns the
+    # 4-tuple with sensible types.
+    trained, best_val, best_epoch, history = lstm_model.train_model(
+        model, train_loader, val_loader,
+        epochs=2, lr=1e-2, patience=10,
+        weight_decay=1e-4,
+        loss_fn=torch.nn.SmoothL1Loss(),
+        verbose=False,
+    )
+    assert isinstance(best_val, float)
+    assert isinstance(best_epoch, int)
+    assert len(history["train_loss"]) == 2
+
+
 def test_predict_returns_array_with_correct_shape():
     torch.manual_seed(0)
     X_qty, X_cal, prod_idx, y = _dummy_arrays(n=6, lookback=5, horizon=3)
