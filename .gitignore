@@ -112,4 +112,3 @@ encoder.pkl
 # Temporary files
 *.tmp
 *.bak
-/sales.csv
