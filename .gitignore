@@ -1,4 +1,6 @@
 # Raw data — too large for git
+data/sales.csv
+
 sales.csv
 data/processed/
 
@@ -9,22 +11,114 @@ models/*.pt
 # integration can consume each model's *_test_predictions.csv from git.
 
 # Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
-*.pyo
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 .pytest_cache/
-.test_tmp_preprocessing/
-.tmp/
 
-# Jupyter
-.ipynb_checkpoints/
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_checkpoints
 
-# Virtual envs
-venv/
-.venv/
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.venv
 env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# OS / IDE
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
-Thumbs.db
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# Data files
+
+
+# Model files
+*.pkl
+*.pickle
+*.h5
+*.model
+*.pth
+*.onnx
+
+# Predictions and outputs
+predictions/*.npy
+predictions/*.txt
+results/
+output/
+logs/
+
+# ML-specific
+*.joblib
+scaler.pkl
+encoder.pkl
+
+# Temporary files
+*.tmp
+*.bak
