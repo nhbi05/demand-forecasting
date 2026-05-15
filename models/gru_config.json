@@ -1,0 +1,48 @@
+{
+  "version": "v1",
+  "n_products": 100,
+  "embed_dim": 4,
+  "lookback": 60,
+  "horizon": 30,
+  "hidden_size": 64,
+  "num_layers": 2,
+  "dropout": 0.3,
+  "weight_decay": 0.0001,
+  "n_calendar": 14,
+  "feature_cols": [
+    "dow_sin",
+    "dow_cos",
+    "dom_sin",
+    "dom_cos",
+    "month_sin",
+    "month_cos",
+    "quantity_scaled",
+    "positive_quantity_scaled",
+    "returns_quantity_scaled",
+    "price_base_scaled",
+    "sum_total_scaled",
+    "transaction_count_scaled",
+    "store_count_scaled",
+    "had_sales"
+  ],
+  "target_mode": "residual_against_seasonal_naive",
+  "period": 7,
+  "best_epoch": 9,
+  "test_metrics": {
+    "rmse": 63.019205116632726,
+    "mae": 31.342990535672506,
+    "mape": 34.71617895828704
+  },
+  "baselines": {
+    "naive": {
+      "rmse": 122.94097566490294,
+      "mae": 44.66876486193339,
+      "mape": 41.88880087662499
+    },
+    "seasonal_naive": {
+      "rmse": 54.73357789529401,
+      "mae": 29.06154148906072,
+      "mape": 35.09009786426079
+    }
+  }
+}
