@@ -2,6 +2,13 @@
 data/sales.csv
 
 sales.csv
+data/processed/
+
+# Model checkpoints (binary, large) — share via Drive if teammates need them
+models/*.pt
+
+# Note: data/predictions/ is intentionally tracked so the ensemble
+# integration can consume each model's *_test_predictions.csv from git.
 
 # Python
 # Byte-compiled / optimized / DLL files
