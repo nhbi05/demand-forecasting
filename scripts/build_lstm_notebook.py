@@ -485,16 +485,6 @@ with open("models/lstm_config.json", "w") as f:
     }, f, indent=2)
 print("saved models/lstm_final.pt and models/lstm_config.json")""")
 
-md("""### For teammates consuming this output
-
-- **The canonical handoff is `data/predictions/lstm_test_predictions.csv`** - join your model's predictions on `(date, item_id)` for the ensemble stack.
-- LSTM metrics on the shared test window: RMSE 61.76 / MAE 31.38 / MAPE 32.89%. Seasonal-naive baseline on the same windows: RMSE 54.73 / MAE 29.06.
-- The LSTM loses to seasonal-naive on RMSE/MAE but wins on MAPE - different error patterns from a smoothing baseline, which is what makes it useful in the ensemble.
-- Residual mean is -7.18 (slight underprediction bias). Worth knowing if your ensemble blends model means.
-
-If you want to re-run: section 0's bootstrap cell handles Colab setup automatically.""")
-
-
 def main():
     nb = nbf.v4.new_notebook()
     nb["cells"] = [
