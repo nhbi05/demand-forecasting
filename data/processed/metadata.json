@@ -1,0 +1,25 @@
+{
+  "csv_path": "sales.csv",
+  "n_raw_rows": 7432685,
+  "n_products": 100,
+  "n_selected_products": 100,
+  "full_history_days": null,
+  "min_history_days": null,
+  "min_active_days": 30,
+  "ranking_col": "positive_quantity",
+  "benchmark_rule": "top 100 products by positive_quantity with at least 30 active sales days",
+  "fill_missing_dates": true,
+  "outlier_percentile": 99.5,
+  "scale_columns": [
+    "quantity",
+    "positive_quantity",
+    "returns_quantity",
+    "price_base",
+    "sum_total",
+    "transaction_count",
+    "store_count"
+  ],
+  "date_min": "2022-08-28",
+  "date_max": "2024-09-26",
+  "n_daily_rows": 76100
+}
