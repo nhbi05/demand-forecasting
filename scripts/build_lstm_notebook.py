@@ -402,7 +402,7 @@ print(f"{'Naive':<20} {m_naive['rmse']:>10.2f} {m_naive['mae']:>10.2f} {m_naive[
 print(f"{'Seasonal-naive':<20} {m_seas['rmse']:>10.2f} {m_seas['mae']:>10.2f} {m_seas['mape']:>9.2f}%")
 print(f"{'LSTM v4':<20} {m_lstm['rmse']:>10.2f} {m_lstm['mae']:>10.2f} {m_lstm['mape']:>9.2f}%")
 print()
-print("Historical reference points (different setups, NOT apples-to-apples):")
+print("Historical reference points (different setups, so cannot be compared directly):")
 print(f"{'  LSTM v1 (top-50)':<20} {97.97:>10.2f} {47.10:>10.2f} {24.08:>9.2f}%")
 print(f"{'  LSTM v2 (residual)':<20} {167.63:>10.2f} {50.24:>10.2f} {34.59:>9.2f}%")
 print(f"{'  LSTM v3 (12 feat)':<20} {63.70:>10.2f} {33.33:>10.2f} {34.25:>9.2f}%")""")
