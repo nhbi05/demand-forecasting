@@ -1,0 +1,36 @@
+{
+  "calendar": [
+    "dow_sin",
+    "dow_cos",
+    "dom_sin",
+    "dom_cos",
+    "month_sin",
+    "month_cos"
+  ],
+  "scaled": [
+    "quantity_scaled",
+    "positive_quantity_scaled",
+    "returns_quantity_scaled",
+    "price_base_scaled",
+    "sum_total_scaled",
+    "transaction_count_scaled",
+    "store_count_scaled"
+  ],
+  "shared_default": [
+    "dow_sin",
+    "dow_cos",
+    "dom_sin",
+    "dom_cos",
+    "month_sin",
+    "month_cos",
+    "quantity_scaled",
+    "positive_quantity_scaled",
+    "returns_quantity_scaled",
+    "price_base_scaled",
+    "sum_total_scaled",
+    "transaction_count_scaled",
+    "store_count_scaled",
+    "had_sales"
+  ],
+  "target": "quantity_scaled"
+}

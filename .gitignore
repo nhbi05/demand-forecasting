@@ -1,7 +1,7 @@
 # Raw data — too large for git
 data/sales.csv
 
-
+sales.csv
 
 # Python
 # Byte-compiled / optimized / DLL files
@@ -90,10 +90,7 @@ venv.bak/
 /site
 
 # Data files
-*.csv
-*.xlsx
-*.xls
-*.json
+
 
 # Model files
 *.pkl

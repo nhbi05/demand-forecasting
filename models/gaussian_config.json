@@ -1,0 +1,23 @@
+{
+  "feature_cols": [
+    "doy_sin",
+    "doy_cos",
+    "dow_sin",
+    "dow_cos",
+    "month_sin",
+    "month_cos",
+    "lag_1",
+    "lag_7",
+    "lag_14",
+    "rolling_mean_7",
+    "rolling_mean_30"
+  ],
+  "n_products": 100,
+  "test_start": "2024-04-28",
+  "test_end": "2024-09-26",
+  "metrics": {
+    "MSE": 23513.673055,
+    "MAE": 59.845976,
+    "R2": 0.874775
+  }
+}
