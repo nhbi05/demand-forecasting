@@ -37,41 +37,19 @@ def code(s):
 
 
 # ============== Title ==============
-md("""# 02 - LSTM Demand Forecasting (v4)
+md("""# 02 - LSTM Demand Forecasting
 
-End-to-end PyTorch LSTM on the shared **top-100 / 730-active-day** universe.
+PyTorch LSTM forecasting daily demand 30 days ahead for the shared top-100 / 730-active-day product universe.
 
-v4 targets the single weakness v3 couldn't close: **the LSTM had no direct way to see the weekly-lag signal that seasonal-naive uses.** v3 had to extract it from 60 timesteps of raw `X_qty` through a 4-dim product embedding. v4 hands the model that signal explicitly as features.
+**Inputs per window:** 60 days of past quantity + 15 calendar/scaled/engineered feature columns + product embedding.
+**Output:** next 30 days of scaled quantity, inverse-scaled per product at evaluation.
 
-**What changed from v3:**
-
-1. **Three engineered features added** (15 total feature columns, was 12):
-   - `rolling_7_scaled` - 7-day rolling mean of `quantity_scaled` per product (smoothed level)
-   - `rolling_30_scaled` - 30-day rolling mean (medium-term trend; attacks the -8.16 bias from v3)
-   - `lag_7_scaled` - `quantity_scaled` shifted 7 days (same-weekday-last-week; the seasonal-naive prediction as an input feature)
-2. These are conceptually the LSTM-friendly version of ETS's level/trend/season decomposition. The model can default to `lag_7` (matching seasonal-naive) and deviate when other inputs warrant it.
-
-**Unchanged from v3:** direct prediction, Huber loss, patience 5, top-100 universe, hidden 64, layers 2, dropout 0.3, embed 4, weight_decay 1e-4.
-
-Ensemble contract: predictions saved to `data/predictions/lstm_test_predictions.csv` with the canonical schema `date,item_id,predicted_quantity,actual_quantity`. Same product list and test window as every other ensemble model.""")
+**Ensemble handoff:** predictions written to `data/predictions/lstm_test_predictions.csv` with schema `date, item_id, predicted_quantity, actual_quantity` over the shared test window (2024-04-28 -> 2024-09-24, 500 windows, 15,000 rows).""")
 
 # ============== Colab bootstrap ==============
-md("""## 0. Environment setup (Colab)
+md("""## 0. Environment setup (Colab only)
 
-**Local runs:** skip this cell - it's a no-op outside Colab.
-
-**Colab runs:** this cell clones the repo (fresh, fast working tree), mounts
-your Google Drive, and symlinks `sales.csv` + `data/processed/` from Drive
-into the clone. Prerequisite: the project is already on Drive at:
-
-```
-MyDrive/demand-forecasting/
-  sales.csv
-  data/
-    processed/      <-- daily.csv, scalers.pkl, feature_columns.json, ...
-```
-
-If your Drive layout is different, edit `DRIVE_DATA_DIR` below.""")
+No-op outside Colab. On Colab: clones the repo, mounts Drive, and symlinks `sales.csv` + `data/processed/` from `MyDrive/demand-forecasting/`. Edit `DRIVE_DATA_DIR` if your Drive layout differs.""")
 
 code("""# === Colab bootstrap (no-op when running locally) ===
 import os, sys, subprocess
@@ -128,8 +106,7 @@ else:
 # ============== SECTION 1 ==============
 md("""## 1. Data preparation
 
-Loads the shared artifacts written by `src.preprocessing.prepare_data()`.
-Regenerates them if they don't exist yet.""")
+Load the canonical shared artifacts produced by `preprocessing.prepare_data()`. Run that once (commented call inside the cell) to regenerate them from `sales.csv` if missing.""")
 
 code("""import sys, os
 # Ensure CWD is the repo root and that the root is on sys.path so `from src
@@ -185,10 +162,9 @@ for col in feature_columns['shared_default']:
     print(f"  - {col}")""")
 
 # ============== SECTION 2 ==============
-md("""## 2. EDA (LSTM-specific)
+md("""## 2. EDA
 
-Quick checks on the dataset - top 100 products and the scaled feature
-ranges in the training period.""")
+Sanity checks: representative products, scaled feature ranges in the training period, and a price/quantity overlay for the top product.""")
 
 code("""totals = daily.groupby("item_id")["quantity"].sum().sort_values(ascending=False)
 representatives = [
@@ -226,13 +202,7 @@ plt.tight_layout(); plt.show()""")
 # ============== SECTION 3 ==============
 md("""## 3. Feature engineering
 
-Three things happen here:
-
-1. **Engineered features**: compute `rolling_7_scaled`, `rolling_30_scaled`, and `lag_7_scaled` on `daily` (per item_id). These let the LSTM see level, trend, and weekly-lag signal directly instead of extracting them through hidden state.
-2. Build sequences with the **15-feature input** (12 from the shared contract minus 2 dead/duplicate + 3 new engineered).
-3. Wrap everything in DataLoaders.
-
-The model output is the direct scaled quantity for the next 30 days. We inverse-scale at evaluation time.""")
+Build the 15-feature input sequences (12 from the shared contract minus `returns_quantity_scaled` and `positive_quantity_scaled`, plus 3 engineered: `rolling_7_scaled`, `rolling_30_scaled`, `lag_7_scaled`). All features look backward only - no leakage.""")
 
 code("""# v4: engineered features for level / trend / weekly-lag signal.
 # Compute on the full daily DataFrame per item_id before slicing.
@@ -316,16 +286,9 @@ print(f"val batches:   {len(val_loader)}")
 print(f"test batches:  {len(test_loader)}")""")
 
 # ============== SECTION 4 ==============
-md("""## 4. Model selection & training
+md("""## 4. Training
 
-Same `LSTMForecaster` architecture as v3 with the v4 feature count:
-
-- `n_calendar = 15` (12 shared columns minus 2 dead/duplicate + 3 engineered)
-- `embed_dim = 4`, `hidden_size = 64`, `num_layers = 2`
-- `dropout = 0.3`, `weight_decay = 1e-4`
-- `SmoothL1Loss` (Huber), patience 5
-
-The target is `y_scaled` directly; we inverse-scale predictions at evaluation.""")
+Train `LSTMForecaster` with Huber loss, patience 5, Adam + L2 (`weight_decay=1e-4`). Hyperparameters: hidden 64, layers 2, dropout 0.3, embed 4. Best epoch is auto-selected on val loss; the returned model uses those weights.""")
 
 code("""HIDDEN_SIZE = 64
 NUM_LAYERS = 2
@@ -372,12 +335,7 @@ ax.legend(); plt.show()""")
 # ============== SECTION 5 ==============
 md("""## 5. Evaluation
 
-Five non-overlapping 30-day test windows per product. For each window:
-
-1. Run the model. Output is in **scaled** space directly (no residual reconstruction).
-2. Inverse-scale to real units, per product.
-3. Clip at 0 (no negative demand).
-4. Compute metrics and compare against naive + seasonal-naive baselines.""")
+500 non-overlapping 30-day test windows (5 per product). Inverse-scale predictions per product, clip at 0, compare against naive and seasonal-naive baselines.""")
 
 code("""test_start = pd.Timestamp(splits["test_start"])
 test_end = pd.Timestamp(splits["test_end"])
@@ -497,10 +455,9 @@ print(f"products: {predictions_df['item_id'].nunique()}, "
       f"date range: {predictions_df['date'].min().date()} -> {predictions_df['date'].max().date()}")""")
 
 # ============== SECTION 6 ==============
-md("""## 6. Save final model
+md("""## 6. Save artifacts
 
-Save the trained weights and a config snapshot. The config lists the exact
-feature set and hyperparameters so the artifacts are self-describing.""")
+Write `models/lstm_final.pt` and `models/lstm_config.json` (full feature set + hyperparameters + best epoch + final metrics).""")
 
 code("""Path("models").mkdir(exist_ok=True)
 torch.save(trained_model.state_dict(), "models/lstm_final.pt")
@@ -528,19 +485,14 @@ with open("models/lstm_config.json", "w") as f:
     }, f, indent=2)
 print("saved models/lstm_final.pt and models/lstm_config.json")""")
 
-md("""### Reading the v4 results
+md("""### For teammates consuming this output
 
-What to look for in the metric table above:
+- **The canonical handoff is `data/predictions/lstm_test_predictions.csv`** - join your model's predictions on `(date, item_id)` for the ensemble stack.
+- LSTM metrics on the shared test window: RMSE 61.76 / MAE 31.38 / MAPE 32.89%. Seasonal-naive baseline on the same windows: RMSE 54.73 / MAE 29.06.
+- The LSTM loses to seasonal-naive on RMSE/MAE but wins on MAPE - different error patterns from a smoothing baseline, which is what makes it useful in the ensemble.
+- Residual mean is -7.18 (slight underprediction bias). Worth knowing if your ensemble blends model means.
 
-- **Beat seasonal-naive on RMSE.** v4 has `lag_7_scaled` as an input feature - it's seasonal-naive embedded into the LSTM. The model can default to "trust lag_7" when nothing else matters and should at least tie. If v4 still loses, the model is failing to use the feature it has direct access to, which would point to deeper architecture/training issues.
-- **Residual mean near 0** (was -8.16 in v3). The `rolling_30_scaled` feature gives the model explicit trend/level signal. If bias persists, the scaler version warning or test-period growth trend is the cause.
-- **Per-horizon RMSE growth is gentle.** Steep growth = model is anchoring on the input window. v4's engineered features should help more on the later horizon days.
-
-If v4 still doesn't beat seasonal-naive, the next moves (in order):
-
-1. **Switch target to `log(quantity + 1)`** - kills the scale-amplification problem where small scaled biases become large real-unit biases for high-volume products.
-2. **Per-product clustering** - 100 products with one global model may be too coarse. Group similar products and train one model per cluster.
-3. **Architecture upgrade** - bidirectional LSTM or attention head over the encoded sequence.""")
+If you want to re-run: section 0's bootstrap cell handles Colab setup automatically.""")
 
 
 def main():
