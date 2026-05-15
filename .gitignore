@@ -1,8 +1,12 @@
 # Raw data — too large for git
 sales.csv
 data/processed/
-data/predictions/
+
+# Model checkpoints (binary, large) — share via Drive if teammates need them
 models/*.pt
+
+# Note: data/predictions/ is intentionally tracked so the ensemble
+# integration can consume each model's *_test_predictions.csv from git.
 
 # Python
 __pycache__/
