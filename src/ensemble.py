@@ -111,11 +111,14 @@ class EnsembleForecaster:
 
         r2 = r2_score(y_true, y_pred)
 
+        nonzero = y_true != 0
         mape = (
             mean_absolute_percentage_error(
-                y_true,
-                y_pred
+                y_true[nonzero],
+                y_pred[nonzero]
             ) * 100
+            if nonzero.any()
+            else float('nan')
         )
 
         return {
