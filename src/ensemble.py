@@ -57,17 +57,20 @@ class EnsembleForecaster:
     def adapt_weights(self, y_true, predictions_dict):
 
         """
-        Adapt weights using R² score
-        Better models receive larger weights
+        Adapt weights using inverse-RMSE.
+        Better models (lower RMSE) receive larger weights.
+        R^2 was previously used but clusters near 1 for all
+        decent models, producing near-uniform weights that
+        fail to discount weaker members of the ensemble.
         """
 
         scores = {}
 
         for model_name, preds in predictions_dict.items():
 
-            r2 = r2_score(y_true, preds)
+            rmse = np.sqrt(mean_squared_error(y_true, preds))
 
-            scores[model_name] = max(r2, 0)
+            scores[model_name] = 1.0 / max(rmse, 1e-9)
 
         total = sum(scores.values())
 
