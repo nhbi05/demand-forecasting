@@ -1,0 +1,1048 @@
+\documentclass[12pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=3cm, right=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{float}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{enumitem}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% --- Page style ---
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\textit{Demand Forecasting System}}
+\fancyhead[R]{\small\textit{\nouppercase{\leftmark}}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% --- Section formatting ---
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\itshape}{\thesubsubsection}{1em}{}
+
+% --- Code listing style ---
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\definecolor{keyblue}{rgb}{0.0,0.3,0.7}
+\definecolor{commentgreen}{rgb}{0.1,0.5,0.1}
+\definecolor{stringred}{rgb}{0.6,0.1,0.1}
+\lstset{
+    language=Python,
+    backgroundcolor=\color{codegray},
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{keyblue}\bfseries,
+    commentstyle=\color{commentgreen}\itshape,
+    stringstyle=\color{stringred},
+    showstringspaces=false,
+    breaklines=true,
+    frame=single,
+    framesep=4pt,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    tabsize=4,
+    captionpos=b
+}
+
+\setstretch{1.2}
+\setlength{\parskip}{6pt}
+
+% =========================================================
+\begin{document}
+
+% ===================== COVER PAGE ========================
+\begin{titlepage}
+    \centering
+    \vspace*{1.5cm}
+
+    {\Huge\bfseries Demand Forecasting System\par}
+    \vspace{0.4cm}
+    {\large\itshape A Multi-Model Ensemble Approach to Retail Demand Prediction\par}
+
+    \vspace{1.5cm}
+    \rule{\textwidth}{1pt}
+    \vspace{1cm}
+
+    {\large\bfseries Final Project Report\par}
+
+    \vspace{2cm}
+
+    \begin{tabular}{@{}ll@{}}
+        \textbf{Course / Programme:} & Bachelor of Computer Science (BCSC) \\[0.3cm]
+        \textbf{GitHub Repository:}  & \url{https://github.com/nhbi05/demand-forecasting} \\[0.3cm]
+        \textbf{Submission Date:}    & \today \\
+    \end{tabular}
+
+    \vspace{0.8cm}
+    {\normalsize\bfseries Group Members\par}
+    \vspace{0.3cm}
+
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{@{}clc@{}}
+        \toprule
+        \textbf{No.} & \textbf{Name} & \textbf{Student ID} \\
+        \midrule
+        1 & Nansereko Housnah       & 24/U/09631/EVE \\
+        2 & Suuna Raymond           & 24/U/11403/EVE \\
+        3 & Kewoda Joanitah         & 24/U/05727/EVE \\
+        4 & Tamale Denis Valelian   & 24/U/11433/EVE \\
+        5 & Nabukeera Sumayah Kaswa & 24/U/07899/EVE \\
+        \bottomrule
+    \end{tabular}
+
+    \vfill
+    \rule{\textwidth}{0.5pt}
+\end{titlepage}
+
+% ===================== TOC / LISTS =======================
+\newpage
+\tableofcontents
+
+\newpage
+\listoffigures
+
+\listoftables
+
+% ===================== 1. INTRODUCTION ===================
+\newpage
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{Background}
+\label{subsec:background}
+
+Demand forecasting is the process of estimating the quantity of a product that will be sold
+over a future time horizon. It underpins a wide range of supply-chain decisions, including
+inventory replenishment, staffing, production scheduling, and logistics planning. In a retail
+context, accurate demand forecasts reduce stockouts — where insufficient inventory causes
+lost sales — and overstock events, where excess inventory ties up capital and drives markdown
+losses~\cite{hyndman2021}.
+
+Classical time-series methods such as ARIMA and exponential smoothing have long been applied
+to demand forecasting; however, they assume linear relationships and require individual
+model fitting per product, limiting scalability and their ability to capture the complex
+non-linear seasonal dynamics present in real-world retail data. Machine-learning approaches
+have emerged as a compelling alternative: gradient-boosted trees and Random Forests capture
+non-linear feature interactions efficiently~\cite{breiman2001}, while deep recurrent
+architectures such as LSTM~\cite{hochreiter1997} and GRU~\cite{cho2014} learn sequential
+temporal patterns directly from historical observations.
+
+Rather than selecting a single model, ensemble methods combine predictions from multiple
+diverse models to reduce variance, smooth individual model weaknesses, and typically
+outperform any single constituent model~\cite{dietterich2000}. This project adopts that
+ensemble philosophy.
+
+\subsection{Problem Statement}
+\label{subsec:problem}
+
+Retail businesses face the challenge of forecasting daily demand at the product level, often
+with significant noise in transaction records. No single modelling approach adequately
+handles all the variability in real-world sales data: recurrent neural networks capture
+sequential dependencies well but may overfit on sparsely observed products, while tree-based
+models handle feature interactions effectively but miss long-range temporal patterns.
+Probabilistic models such as Gaussian Processes quantify forecast uncertainty but are
+computationally prohibitive at scale.
+
+This project addresses these challenges by:
+\begin{enumerate}[leftmargin=*, label=(\roman*)]
+    \item Designing and implementing a shared preprocessing pipeline that produces canonical
+          data artifacts used by all models.
+    \item Training four independent forecasting models (LSTM, GRU, Random Forest, Gaussian
+          Process) on shared data.
+    \item Combining their predictions through a performance-weighted ensemble to produce a
+          final forecast.
+    \item Evaluating all models and the ensemble on a held-out test set using standard
+          regression metrics.
+\end{enumerate}
+
+\subsection{Objectives}
+\label{subsec:objectives}
+
+The specific objectives of this project are:
+\begin{itemize}[leftmargin=*]
+    \item Develop a preprocessing pipeline that transforms 7.4~million raw retail
+          transactions into a clean, feature-rich daily dataset.
+    \item Train LSTM, GRU, Random Forest, and Gaussian Process models on the processed data.
+    \item Implement a simple-average ensemble and a performance-weighted ensemble.
+    \item Evaluate all models using $R^{2}$, RMSE, and MAPE on a common held-out test set.
+    \item Analyse and interpret results to draw conclusions about the relative strengths of
+          each modelling approach.
+\end{itemize}
+
+\subsection{Significance of the Study}
+\label{subsec:significance}
+
+Improved demand forecasting has direct business value: it reduces overstock and stockout
+events, informs replenishment decisions, and supports data-driven planning. Beyond the
+immediate application, this project demonstrates a replicable pipeline in which multiple
+heterogeneous machine learning models are trained independently on shared artifacts and
+combined transparently — a pattern applicable across a wide range of time-series
+forecasting problems.
+
+% ===================== 2. METHODOLOGY ===================
+\newpage
+\section{Methodology}
+\label{sec:methodology}
+
+% -------- 2.1 Dataset Description --------
+\subsection{Dataset Description}
+\label{subsec:dataset}
+
+The raw dataset (\texttt{sales.csv}) comprised \textbf{7,432,685} retail transaction rows
+spanning \textbf{28~August~2022 to 26~September~2024} (761~calendar days) across
+\textbf{4~stores} and \textbf{28,182~unique products}. Each row recorded one transaction
+with the six fields described in Table~\ref{tab:raw_schema}.
+
+\begin{table}[H]
+    \centering
+    \caption{Raw dataset column schema (\texttt{sales.csv}).}
+    \label{tab:raw_schema}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}llp{7cm}@{}}
+        \toprule
+        \textbf{Column} & \textbf{Type} & \textbf{Description} \\
+        \midrule
+        \texttt{date}        & date   & Transaction date \\
+        \texttt{item\_id}    & string & Unique product identifier \\
+        \texttt{quantity}    & float  & Units sold; negative values indicate returns \\
+        \texttt{price\_base} & float  & Base unit price \\
+        \texttt{sum\_total}  & float  & Total revenue
+                                        (\texttt{quantity} $\times$ \texttt{price\_base}) \\
+        \texttt{store\_id}   & int    & Store identifier (4 stores) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Table~\ref{fig:raw_sample} shows the first five rows of the raw dataset as loaded from
+the notebook.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/raw_sample.png}
+    \caption{First five rows of the raw dataset
+             (shape: 7{,}432{,}685 $\times$ 6).}
+    \label{fig:raw_sample}
+\end{figure}
+
+After aggregation, the processed dataset contained \textbf{76,100 rows} — one row per
+product per day — focused on the top~100 products by total positive demand.
+
+% -------- 2.2 Exploratory Data Analysis --------
+\subsection{Exploratory Data Analysis}
+\label{subsec:eda}
+
+Exploratory analysis was conducted on the raw data to understand demand patterns,
+distribution characteristics, and temporal structure before any modelling decisions
+were made.
+
+\subsubsection{Quantity Distribution}
+
+Transaction quantities were heavily \textbf{right-skewed}: the median was 2~units, the
+mean 5.6~units, and the maximum 4,952~units. Most transactions were small, but a long
+tail of bulk orders and high-volume products inflated the mean substantially. This
+skewness directly motivated per-product outlier capping and independent product-level
+scaling during preprocessing.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/qty_dist.png}
+    \caption{Distribution of transaction quantities (clipped to $[-10,\,100]$ for
+             readability), showing the right-skewed demand distribution.}
+    \label{fig:qty_dist}
+\end{figure}
+
+\subsubsection{Seasonality and Trends}
+
+Figure~\ref{fig:daily_volume} shows aggregate daily sales over the full period, revealing
+a gradual upward trend and visible weekly periodicity. Figure~\ref{fig:dow} confirms
+strong day-of-week effects. Year-over-year analysis further showed a December demand
+spike and a step-up in baseline sales from 2023 to 2024.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/fig1_daily_volume.png}
+    \caption{Daily aggregate transaction volume over the full 761-day dataset period,
+             showing a gradual upward trend and weekly periodicity.}
+    \label{fig:daily_volume}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{images/fig2_dow_seasonality.png}
+    \caption{Average demand by day of week, confirming strong weekly seasonality.}
+    \label{fig:dow}
+\end{figure}
+
+\subsubsection{Stationarity and Temporal Dependency}
+
+An Augmented Dickey-Fuller (ADF) test returned a statistic of $-0.657$ and a p-value
+of $0.858$, confirming the series is \textbf{non-stationary} — consistent with the
+visible upward trend. ACF and PACF analysis showed persistent autocorrelation across
+all 60~lags and dominant direct effects at lags~1 and~7, establishing weekly demand
+history as the key temporal signal.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/acf_pacf.png}
+    \caption{ACF (left) and PACF (right) of aggregate daily quantity over 60 lags.
+             Persistent ACF confirms non-stationarity; PACF spikes at lags 1 and 7
+             identify the dominant predictors.}
+    \label{fig:acf_pacf}
+\end{figure}
+
+\subsubsection{Key Findings}
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Right-skewed demand} --- outlier capping and per-product scaling
+          were essential to prevent dominant products from distorting model training.
+    \item \textbf{Strong weekly seasonality} --- day-of-week cyclical features were
+          included in all models; the GRU uses last week's demand as a residual baseline.
+    \item \textbf{Non-stationary trend} --- addressed by the GRU's residual learning
+          and the LSTM's learned product embeddings.
+    \item \textbf{Lag~1 and lag~7 are the strongest predictors} --- informed the
+          60-day lookback window for LSTM/GRU and lag feature selection for Random Forest.
+    \item \textbf{High product sparsity} --- the median product had only 72~active days,
+          restricting modelling to the top~100 high-volume products.
+\end{itemize}
+
+% -------- 2.3 Data Cleaning --------
+\subsection{Data Cleaning}
+\label{subsec:cleaning}
+
+The preprocessing pipeline (\texttt{src/preprocessing.py}) first cleaned the raw data
+before any transformation.
+
+\paragraph{Missing value handling.}
+Rows missing a date, item identifier, or quantity were dropped. Missing base prices were
+imputed using the per-product median, falling back to the global median and then zero.
+Missing store identifiers were assigned a sentinel value
+(\texttt{\_\_missing\_store\_\_}). Missing revenue totals were recalculated as
+\texttt{quantity} $\times$ \texttt{price\_base}.
+
+\paragraph{Daily aggregation.}
+Transaction-level data was aggregated to daily product-level demand. Records were
+grouped by \texttt{(date, item\_id)} to produce daily net quantity,
+\texttt{positive\_quantity} (sales only), returns volume, transaction count, store count,
+mean price, and the binary \texttt{had\_sales} flag. A complete product-date grid was
+then constructed so that every product has exactly one row per calendar day.
+
+\paragraph{Outlier handling.}
+Per-product outlier caps were computed at the \textbf{99.5th percentile} of the training
+distribution for \texttt{quantity}, \texttt{positive\_quantity}, and
+\texttt{returns\_quantity}. Values exceeding these caps were winsorised (clipped) to the
+cap value. Thresholds were fitted on the training period only to prevent data leakage.
+
+% -------- 2.4 Feature Engineering --------
+\subsection{Feature Engineering}
+\label{subsec:features}
+
+Three categories of features were constructed from the cleaned daily data.
+
+\paragraph{Cyclical calendar features.}
+Sine and cosine transformations were applied to preserve the periodic structure of
+calendar variables:
+\begin{equation}
+    \text{dow\_sin} = \sin\!\left(\frac{2\pi \cdot d_{\text{week}}}{7}\right), \qquad
+    \text{dow\_cos} = \cos\!\left(\frac{2\pi \cdot d_{\text{week}}}{7}\right)
+    \label{eq:calendar}
+\end{equation}
+with analogous encodings for day-of-month (period~31) and month (period~12), yielding
+6~calendar features in total.
+
+\paragraph{Lag features.}
+Lagged demand values at 1, 7, 14, and 30~days prior (\texttt{lag\_1},
+\texttt{lag\_7}, \texttt{lag\_14}, \texttt{lag\_30}) were constructed to capture
+short-term and medium-term demand history.
+
+\paragraph{Rolling statistics.}
+Rolling means and standard deviations over 7-, 14-, and 30-day windows were computed
+per product, providing a smoothed view of recent demand level and variability.
+
+% -------- 2.5 Scaling and Normalisation --------
+\subsection{Scaling and Normalisation}
+\label{subsec:scaling}
+
+A \texttt{MinMaxScaler} was fitted \textbf{per product} on the training period and
+applied to seven columns: \texttt{quantity}, \texttt{positive\_quantity},
+\texttt{returns\_quantity}, \texttt{price\_base}, \texttt{sum\_total},
+\texttt{transaction\_count}, and \texttt{store\_count}. Per-product scaling was chosen
+because demand magnitudes vary widely across products; a single global scaler would
+compress low-volume products into a near-zero range. Fitting scalers on the training
+period only ensured no future information leaked into the transformation.
+
+% -------- 2.6 Data Splitting --------
+\subsection{Data Splitting}
+\label{subsec:splits}
+
+A \textbf{chronological split} was applied to reflect real forecasting conditions —
+the model is always trained on past data and evaluated on future data. All scalers,
+outlier thresholds, and product selections were derived exclusively from the training
+period. The split boundaries are given in Table~\ref{tab:splits}.
+
+\begin{table}[H]
+    \centering
+    \caption{Chronological train / validation / test split boundaries.}
+    \label{tab:splits}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        \textbf{Split} & \textbf{Start Date} & \textbf{End Date} \\
+        \midrule
+        Training   & 28 Aug 2022 & 27 Feb 2024 \\
+        Validation & 28 Feb 2024 & 27 Apr 2024 \\
+        Test       & 28 Apr 2024 & 26 Sep 2024 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Using a time-based split — rather than a random split — prevents data leakage and
+ensures that evaluation metrics reflect the model's ability to generalise to genuinely
+unseen future demand.
+
+\subsection{System Architecture}
+\label{subsec:architecture}
+
+The system was structured in two layers: a shared preprocessing pipeline and four
+independent model notebooks, all feeding into a single ensemble notebook. The preprocessing
+module produced a set of canonical shared artifacts — \texttt{daily.csv},
+\texttt{splits.json}, \texttt{selected\_products.json}, \texttt{scalers.pkl},
+\texttt{outlier\_caps.json}, \texttt{feature\_columns.json}, and \texttt{metadata.json}
+— that every model notebook consumed without modification. This design guaranteed that
+product selection, date splits, scaling, and feature definitions were identical across all
+models, making their predictions directly comparable and ensemble-combinable.
+
+Each model notebook saved test-set predictions as a CSV with the schema
+\texttt{(date, item\_id, predicted\_quantity, actual\_quantity)}. The ensemble notebook
+(\texttt{06\_Ensemble.ipynb}) joined these four files on the composite key
+\texttt{(date, item\_id)} and computed weighted averages.
+
+\subsection{Model Descriptions}
+\label{subsec:models}
+
+\subsubsection{Long Short-Term Memory (LSTM)}
+\label{ssubsec:lstm}
+
+LSTM is a recurrent neural network designed for sequential learning~\cite{hochreiter1997}.
+It uses a gating mechanism comprising input, forget, and output gates to selectively retain
+or discard information across long sequences:
+\begin{align}
+    f_t &= \sigma(W_f [h_{t-1}, x_t] + b_f), \label{eq:forget}\\
+    i_t &= \sigma(W_i [h_{t-1}, x_t] + b_i), \label{eq:input}\\
+    \tilde{c}_t &= \tanh(W_c [h_{t-1}, x_t] + b_c), \label{eq:cell_cand}\\
+    c_t &= f_t \odot c_{t-1} + i_t \odot \tilde{c}_t, \label{eq:cell}\\
+    o_t &= \sigma(W_o [h_{t-1}, x_t] + b_o), \label{eq:output}\\
+    h_t &= o_t \odot \tanh(c_t). \label{eq:hidden}
+\end{align}
+
+The model was implemented in PyTorch and accepts a \textbf{60-day lookback window} of
+15~features (6~cyclical calendar, 6~scaled demand/price signals, and 3~engineered lag and
+rolling features). It additionally learns a \textbf{product embedding} of dimension~4 for
+each of the 100~products, implicitly capturing product-level demand characteristics. The
+output is a 30-day-ahead forecast vector. Training used Huber loss (SmoothL1Loss), the
+Adam optimiser ($\eta = 10^{-3}$, weight decay $= 10^{-4}$), and early stopping with
+patience~5 on the validation loss (best epoch:~3, best validation Huber
+loss:~0.0135).
+
+\subsubsection{Gated Recurrent Unit (GRU)}
+\label{ssubsec:gru}
+
+GRU is a simplified recurrent architecture with two gates (reset and update) instead of
+three~\cite{cho2014}, yielding fewer parameters and faster convergence:
+\begin{align}
+    r_t &= \sigma(W_r [h_{t-1}, x_t]), \label{eq:reset}\\
+    z_t &= \sigma(W_z [h_{t-1}, x_t]), \label{eq:update}\\
+    \tilde{h}_t &= \tanh(W[r_t \odot h_{t-1},\, x_t]), \label{eq:cand_h}\\
+    h_t &= (1 - z_t) \odot h_{t-1} + z_t \odot \tilde{h}_t. \label{eq:gru_h}
+\end{align}
+
+A key design choice is \textbf{residual learning}: the GRU predicts a correction
+$\Delta_t$ on top of a seasonal-naive baseline (last week's demand), so that
+\begin{equation}
+    \hat{y}_t = y_{t-7} + \Delta_t.
+    \label{eq:residual}
+\end{equation}
+This focuses model capacity on the portion of demand that weekly seasonality alone cannot
+explain. The GRU shares the same architectural hyperparameters as the LSTM
+(hidden size~64, 2~layers, dropout~0.3) and uses 14~input features. Training used MSE loss
+on the residual target (best epoch:~9).
+
+\subsubsection{Random Forest}
+\label{ssubsec:rf}
+
+Random Forest is an ensemble of decision trees trained on bootstrap samples of the
+data~\cite{breiman2001}. Unlike the recurrent models it operates on \textbf{flat feature
+vectors}. For each (product, day) pair, 21~features are constructed:
+\begin{itemize}[leftmargin=*, nosep]
+    \item Lag features: demand from 1, 7, 14, and 30~days prior.
+    \item Rolling statistics: 7-, 14-, and 30-day rolling means and standard deviations
+          (6~features).
+    \item Calendar features: 6~cyclical encodings of day-of-week, day-of-month, and month.
+    \item Demand and price signals: scaled \texttt{quantity}, \texttt{positive\_quantity},
+          \texttt{price\_base}, \texttt{store\_count}, \texttt{had\_sales}.
+\end{itemize}
+The model used 100~estimators, maximum depth~15, minimum 5~samples to split a node, and
+minimum 2~samples per leaf. Predictions for the 30-day horizon were generated
+\emph{recursively}, with prior predictions substituted as lag inputs where required.
+Feature importance was assessed using the built-in Gini Impurity (Mean Decrease in
+Impurity).
+
+\subsubsection{Gaussian Process}
+\label{ssubsec:gp}
+
+Gaussian Process (GP) regression is a non-parametric probabilistic model that places a
+prior distribution over functions and updates it with observed data~\cite{rasmussen2006}:
+\begin{equation}
+    f(\mathbf{x}) \sim \mathcal{GP}\!\left(m(\mathbf{x}),\; k(\mathbf{x}, \mathbf{x}')\right).
+    \label{eq:gp}
+\end{equation}
+The GP produces both a \textbf{mean prediction} and a \textbf{predictive standard
+deviation}, enabling probabilistic inventory decisions such as safety-stock sizing. The
+composite kernel used was:
+\begin{equation}
+    k = k_{\mathrm{RBF}} + k_{\mathrm{ExpSine}} + k_{\mathrm{Const}} + k_{\mathrm{White}},
+    \label{eq:kernel}
+\end{equation}
+capturing smooth trends (RBF), seasonal patterns (ExpSineSquared), a global constant
+shift (ConstantKernel), and observation noise (WhiteKernel).
+
+GP inference scales as $O(n^{3})$, requiring a hard cap of \textbf{200 rows per product}
+to keep training tractable. The 11~input features comprised day-of-year and day-of-week
+sine/cosine encodings, month encoding, 1-day and 7-day lag features, and 7- and 30-day
+rolling means.
+
+\subsection{Ensemble Strategy}
+\label{subsec:ensemble}
+
+The ensemble combined the four models' test-set predictions through a weighted average.
+Let $\hat{y}^{(m)}_{t}$ denote model~$m$'s prediction at time~$t$ and $w_m$ its weight.
+The ensemble forecast is:
+\begin{equation}
+    \hat{y}^{\mathrm{ens}}_{t} = \sum_{m \in \mathcal{M}} w_m\, \hat{y}^{(m)}_{t},
+    \qquad \sum_{m} w_m = 1.
+    \label{eq:ensemble}
+\end{equation}
+
+Two strategies were implemented:
+\begin{enumerate}[leftmargin=*, label=(\roman*)]
+    \item \textbf{Simple Average:} $w_m = 0.25$ for all models.
+    \item \textbf{Weighted Average:} weights proportional to each model's calibration-half
+          $R^{2}$:
+          \begin{equation}
+              w_m = \frac{\max(R^{2}_m,\, 0)}{\displaystyle\sum_{m'} \max(R^{2}_{m'},\, 0)}.
+              \label{eq:weights}
+          \end{equation}
+\end{enumerate}
+
+To avoid data leakage, weights were calibrated on the \textbf{first half} of the test
+window (28~April -- 11~July~2024) and ensemble metrics reported exclusively on the
+\textbf{second half} (12~July -- 24~September~2024). The calibrated weights are given in
+Table~\ref{tab:weights}.
+
+\begin{table}[H]
+    \centering
+    \caption{Calibrated ensemble weights (proportional to calibration-half $R^{2}$).}
+    \label{tab:weights}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}lc@{}}
+        \toprule
+        \textbf{Model} & \textbf{Weight} \\
+        \midrule
+        LSTM             & 0.2551 \\
+        GRU              & 0.2549 \\
+        Random Forest    & 0.2530 \\
+        Gaussian Process & 0.2371 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+The near-equal weights reflect the similar $R^{2}$ performance of all four models on the
+calibration window. The GP received a marginally lower weight, consistent with its weaker
+point-forecast performance.
+
+\subsection{Technologies Used}
+\label{subsec:technologies}
+
+The system was implemented in Python~3, using the tools listed in
+Table~\ref{tab:tech}.
+
+\begin{table}[H]
+    \centering
+    \caption{Technologies and libraries used in this project.}
+    \label{tab:tech}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Category} & \textbf{Tool / Library} \\
+        \midrule
+        Deep learning     & PyTorch~\cite{paszke2019} \\
+        Traditional ML    & scikit-learn~\cite{pedregosa2011} \\
+        Data processing   & pandas, NumPy \\
+        Visualisation     & matplotlib \\
+        Notebooks         & Jupyter \\
+        Language          & Python 3 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+% ===================== 3. RESULTS ========================
+\newpage
+\section{Results and Discussion}
+\label{sec:results}
+
+All evaluation metrics were computed on the \textbf{second half of the test window}
+(12~July -- 24~September~2024, 5,775~row-days across the 77~products present in all four
+prediction files) unless stated otherwise. Predictions are reported in original demand
+units (quantities), not scaled values. MAPE was computed only on rows where actual demand
+was strictly positive to avoid division by zero.
+
+\subsection{Individual Model Performance}
+\label{subsec:individual}
+
+Table~\ref{tab:individual} reports the performance of each individual model on the
+evaluation half of the test window.
+
+\begin{table}[H]
+    \centering
+    \caption{Individual model performance on the evaluation half of the test set
+             (12~Jul -- 24~Sep~2024).}
+    \label{tab:individual}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        \textbf{Model} & \textbf{$R^{2}$} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE} \\
+        \midrule
+        LSTM             & 0.9813 & 64.29  & 35.07 & 37.04\% \\
+        GRU              & 0.9806 & 65.61  & 34.79 & 38.45\% \\
+        Random Forest    & 0.9664 & 86.20  & 28.97 & 16.54\% \\
+        Gaussian Process & 0.8656 & 172.54 & 61.13 & 35.77\% \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/lstm_pred.png}
+    \caption{Actual versus predicted daily demand for LSTM on the evaluation half of the
+             test window.}
+    \label{fig:lstm_pred}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/gru_pred.png}
+    \caption{Actual versus predicted daily demand for GRU on the evaluation half of the
+             test window.}
+    \label{fig:gru_pred}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/rf_pred.png}
+    \caption{Actual versus predicted daily demand for Random Forest on the evaluation half
+             of the test window.}
+    \label{fig:rf_pred}
+\end{figure}
+
+\subsubsection{LSTM and GRU}
+
+LSTM and GRU delivered the strongest overall performance, with $R^{2}$ of 0.9813 and
+0.9806 and RMSE of 64.29 and 65.61 respectively. Their near-identical scores reflect the
+well-documented convergence of these two architectures on well-structured time series: the
+GRU's simpler gating scheme is sufficient to capture the dominant weekly periodicities and
+trends present in retail demand. Both models outperformed the seasonal-naive baseline
+(RMSE~54.73 on a 1-day-ahead task) while forecasting 30~days ahead, a substantially harder
+horizon. Their higher MAPE values (37--38\%) compared to Random Forest occur because they
+attempt to forecast all days — including near-zero-demand periods — where absolute
+percentage errors amplify.
+
+\subsubsection{Random Forest}
+
+Random Forest achieved $R^{2} = 0.9664$ with a notably lower MAPE of \textbf{16.54\%},
+outperforming all other models on that metric. This suggests strong calibration on
+typical-demand days, where short-term lag features and rolling averages are highly
+predictive. Its higher RMSE (86.20) relative to the deep learning models indicates that it
+handles extreme demand spikes less gracefully, since decision trees cannot smoothly
+extrapolate beyond the training range.
+
+\subsubsection{Gaussian Process}
+
+Gaussian Process recorded the weakest point-prediction metrics ($R^{2} = 0.8656$, RMSE
+$= 172.54$). This is consistent with two structural constraints: (i) as a probabilistic
+model, its primary design goal is calibrated uncertainty rather than minimum point-forecast
+error; and (ii) training was capped at 200~rows per product to manage $O(n^{3})$
+complexity. Despite its weaker accuracy, the GP uniquely provides a predictive confidence
+interval, which is directly applicable to safety-stock calculations in inventory
+management.
+
+\subsection{Feature Importance}
+\label{subsec:importance}
+
+Feature importance was assessed via the Random Forest's built-in Gini Impurity (Mean
+Decrease in Impurity).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/feature_importance.png}
+    \caption{Top-10 feature importances from the Random Forest model assessed by Gini
+             Impurity.}
+    \label{fig:importance}
+\end{figure}
+
+Short-term lag features — particularly \texttt{lag\_1} (previous day's demand) and
+\texttt{lag\_7} (seven-day lagged demand) — accounted for the largest share of predictive
+importance, confirming that recent sales history and weekly periodicity are the dominant
+signals in retail demand. Rolling means over 7 and 14~days ranked next, followed by
+cyclical calendar encodings (\texttt{dow\_sin}/\texttt{dow\_cos}) and price signals. This
+ranking is consistent with the strong weekly seasonality visible in Figure~\ref{fig:dow}
+and validates the feature engineering choices made across all four models.
+
+\subsection{Ensemble Performance}
+\label{subsec:ensemble_results}
+
+Both ensemble strategies were evaluated on the second half of the test window after
+calibrating weights on the first half. Results are shown in Table~\ref{tab:ensemble}.
+
+\begin{table}[H]
+    \centering
+    \caption{Ensemble versus individual model performance on the evaluation half of the
+             test set (12~Jul -- 24~Sep~2024). Best values in bold.}
+    \label{tab:ensemble}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        \textbf{Model} & \textbf{$R^{2}$} & \textbf{RMSE} & \textbf{MAE} & \textbf{MAPE} \\
+        \midrule
+        LSTM             & \textbf{0.9813} & \textbf{64.29} & 35.07 & 37.04\% \\
+        GRU              & 0.9806          & 65.61          & 34.79 & 38.45\% \\
+        Random Forest    & 0.9664          & 86.20          & \textbf{28.97} & \textbf{16.54\%} \\
+        Gaussian Process & 0.8656          & 172.54         & 61.13 & 35.77\% \\
+        \midrule
+        Simple Ensemble  & 0.9670          & 85.43          & 34.04 & 28.09\% \\
+        Weighted Ensemble & 0.9681         & 84.06          & 33.70 & 28.08\% \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.92\textwidth]{images/ensemble_comparison.png}
+    \caption{Comparison of $R^{2}$, RMSE, and MAPE across all four individual models and
+             both ensemble strategies.}
+    \label{fig:ensemble_comparison}
+\end{figure}
+
+The weighted ensemble marginally outperformed the simple average across all three metrics
+($R^{2}$: 0.9681 vs 0.9670; RMSE: 84.06 vs 85.43; MAPE: 28.08\% vs 28.09\%), confirming
+that performance-proportional weighting provides a consistent, if modest, benefit. Both
+ensembles achieved a MAPE of approximately 28\%, a meaningful improvement over the deep
+learning models (37--38\%) while falling between the deep learning and Random Forest
+extremes.
+
+Neither ensemble surpassed LSTM or GRU individually on $R^{2}$ and RMSE. This is
+consistent with ensemble theory: when the two strongest constituent models are already
+highly correlated — both are recurrent sequence models with identical hyperparameters —
+variance reduction is limited, and the inclusion of the weaker Gaussian Process introduces
+a downward pull on overall accuracy. In settings where constituent models are more
+architecturally diverse, ensemble gains are typically larger.
+
+\subsection{Key Insights}
+\label{subsec:insights}
+
+\begin{enumerate}[leftmargin=*, label=(\arabic*)]
+    \item \textbf{Sequential models dominate accuracy.} LSTM and GRU's ability to learn
+          temporal dependencies over a 60-day window makes them the strongest
+          point-forecasters for daily retail demand.
+    \item \textbf{Random Forest provides complementary calibration.} Its lower MAPE makes
+          it the best choice for predicting typical-demand days, where lag and rolling
+          features are highly informative.
+    \item \textbf{Gaussian Process contributes uniquely through uncertainty.} Despite weaker
+          point accuracy, its probabilistic output is directly applicable to risk-aware
+          inventory planning.
+    \item \textbf{Ensemble gains are modest when models are correlated.} The near-equal
+          weights and limited $R^{2}$ improvement reflect the high architectural similarity
+          between LSTM and GRU. True ensemble benefit requires model diversity.
+    \item \textbf{Feature engineering validates domain knowledge.} The dominance of lag
+          features in Random Forest importance confirms that recent demand history is the
+          single most predictive signal, consistent with prior literature~\cite{hyndman2021}.
+\end{enumerate}
+
+% ===================== 4. CONCLUSION =====================
+\newpage
+\section{Conclusion}
+\label{sec:conclusion}
+
+This project successfully developed a multi-model demand forecasting system trained on
+\textbf{7,432,685} real-world retail transactions. Four machine learning architectures ---
+LSTM, GRU, Random Forest, and Gaussian Process --- were trained independently on shared
+preprocessed data and combined through a weighted ensemble, meeting all stated objectives.
+
+Among individual models, LSTM and GRU achieved the highest predictive accuracy
+($R^{2} = 0.981$), demonstrating that deep learning architectures are highly effective at
+capturing the sequential, cyclical patterns of daily retail demand. Random Forest delivered
+the lowest MAPE (16.54\%), making it the most reliable model for typical-demand days.
+Gaussian Process contributed probabilistic uncertainty estimates not available from the
+other models.
+
+The weighted ensemble ($R^{2} = 0.968$, RMSE\,=\,84.06, MAPE\,=\,28.08\%) improved
+prediction stability and reduced MAPE relative to the deep learning models alone,
+demonstrating the value of combining heterogeneous models. The system provides a robust and
+scalable framework for retail demand forecasting, equipping decision-makers with daily,
+product-level forecasts that can reduce stockouts, optimise replenishment schedules, and
+improve service levels and profitability.
+
+% ===================== REFERENCES ========================
+\newpage
+\begin{thebibliography}{9}
+
+\bibitem{breiman2001}
+Breiman, L. (2001).
+Random Forests.
+\textit{Machine Learning}, 45(1), 5--32.
+
+\bibitem{cho2014}
+Cho, K., van Merrienb\"{o}er, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H.,
+and Bengio, Y. (2014).
+Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine
+Translation.
+In \textit{Proceedings of the 2014 Conference on Empirical Methods in Natural Language
+Processing (EMNLP)}, pp.\ 1724--1734.
+
+\bibitem{dietterich2000}
+Dietterich, T.~G. (2000).
+Ensemble Methods in Machine Learning.
+In \textit{Multiple Classifier Systems}, Lecture Notes in Computer Science, vol.\ 1857.
+Springer, pp.\ 1--15.
+
+\bibitem{hochreiter1997}
+Hochreiter, S. and Schmidhuber, J. (1997).
+Long Short-Term Memory.
+\textit{Neural Computation}, 9(8), 1735--1780.
+
+\bibitem{hyndman2021}
+Hyndman, R.~J. and Athanasopoulos, G. (2021).
+\textit{Forecasting: Principles and Practice}, 3rd~ed.
+OTexts.
+
+\bibitem{paszke2019}
+Paszke, A. et al.\ (2019).
+PyTorch: An Imperative Style, High-Performance Deep Learning Library.
+In \textit{Advances in Neural Information Processing Systems}, 32.
+
+\bibitem{pedregosa2011}
+Pedregosa, F. et al.\ (2011).
+Scikit-learn: Machine Learning in Python.
+\textit{Journal of Machine Learning Research}, 12, 2825--2830.
+
+\bibitem{rasmussen2006}
+Rasmussen, C.~E. and Williams, C.~K.~I. (2006).
+\textit{Gaussian Processes for Machine Learning}.
+MIT Press.
+
+\end{thebibliography}
+
+% ===================== APPENDIX A: HYPERPARAMS ===========
+\newpage
+\appendix
+
+\section{Model Hyperparameters}
+\label{app:hyperparams}
+
+\subsection{LSTM}
+
+\begin{table}[H]
+    \centering
+    \caption{LSTM hyperparameters.}
+    \label{tab:lstm_hp}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Hyperparameter} & \textbf{Value} \\
+        \midrule
+        Framework                & PyTorch \\
+        Lookback window          & 60 days \\
+        Forecast horizon         & 30 days \\
+        Hidden units             & 64 \\
+        Recurrent layers         & 2 \\
+        Dropout rate             & 0.3 \\
+        Product embedding dim    & 4 \\
+        Optimiser                & Adam ($\eta = 10^{-3}$, weight decay $= 10^{-4}$) \\
+        Loss function            & Huber (SmoothL1Loss) \\
+        Max epochs               & 100 \\
+        Early stopping patience  & 5 (monitor: validation Huber loss) \\
+        Best epoch               & 3 \\
+        Best validation Huber loss & 0.013505 \\
+        Input features           & 15 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{GRU}
+
+\begin{table}[H]
+    \centering
+    \caption{GRU hyperparameters.}
+    \label{tab:gru_hp}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Hyperparameter} & \textbf{Value} \\
+        \midrule
+        Framework                & PyTorch \\
+        Lookback window          & 60 days \\
+        Forecast horizon         & 30 days \\
+        Hidden units             & 64 \\
+        Recurrent layers         & 2 \\
+        Dropout rate             & 0.3 \\
+        Product embedding dim    & 4 \\
+        Optimiser                & Adam ($\eta = 10^{-3}$, weight decay $= 10^{-4}$) \\
+        Loss function            & MSE (on residual target $\Delta_t$) \\
+        Max epochs               & 100 \\
+        Early stopping patience  & 10 (monitor: validation MSE) \\
+        Best epoch               & 9 \\
+        Residual learning        & Seasonal-naive baseline $y_{t-7}$ \\
+        Seasonality period       & 7 days \\
+        Input features           & 14 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Random Forest}
+
+\begin{table}[H]
+    \centering
+    \caption{Random Forest hyperparameters.}
+    \label{tab:rf_hp}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Hyperparameter} & \textbf{Value} \\
+        \midrule
+        Framework               & scikit-learn \\
+        \texttt{n\_estimators}  & 100 \\
+        \texttt{max\_depth}     & 15 \\
+        \texttt{min\_samples\_split} & 5 \\
+        \texttt{min\_samples\_leaf}  & 2 \\
+        Lag features            & 1, 7, 14, 30 days \\
+        Rolling windows         & 7, 14, 30 days (mean + std) \\
+        Forecast strategy       & Recursive (30-step) \\
+        Random seed             & 42 \\
+        Input features          & 21 \\
+        Training rows           & 51,900 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\subsection{Gaussian Process}
+
+\begin{table}[H]
+    \centering
+    \caption{Gaussian Process hyperparameters.}
+    \label{tab:gp_hp}
+    \renewcommand{\arraystretch}{1.2}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        \textbf{Hyperparameter} & \textbf{Value} \\
+        \midrule
+        Framework                  & scikit-learn \\
+        Kernel                     & RBF + ConstantKernel + WhiteKernel + ExpSineSquared \\
+        Max training rows/product  & 200 ($O(n^{3})$ constraint) \\
+        Optimiser restarts         & 2 \\
+        Output                     & Mean prediction + uncertainty (std) \\
+        Input features             & 11 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+% ===================== APPENDIX B: CODE ==================
+\newpage
+\section{Key Code Snippets}
+\label{app:code}
+
+\subsection{Ensemble Prediction Join}
+
+Predictions from the four model files are joined on the composite key
+\texttt{(date, item\_id)} before averaging, guaranteeing correct product-day alignment.
+
+\begin{lstlisting}[caption={Inner-join of all four model prediction files.},
+                   label=lst:join]
+merged = (
+    lstm_df
+    .rename(columns={'predicted_quantity': 'lstm_pred',
+                     'actual_quantity':    'actual'})
+    .merge(
+        gru_df.rename(columns={'predicted_quantity': 'gru_pred'})
+              [['date', 'item_id', 'gru_pred']],
+        on=['date', 'item_id'])
+    .merge(
+        rf_df.rename(columns={'predicted_quantity': 'rf_pred'})
+             [['date', 'item_id', 'rf_pred']],
+        on=['date', 'item_id'])
+    .merge(
+        gaussian_df.rename(columns={'predicted_quantity': 'gaussian_pred'})
+                   [['date', 'item_id', 'gaussian_pred']],
+        on=['date', 'item_id'])
+    .sort_values(['date', 'item_id'])
+    .reset_index(drop=True)
+)
+\end{lstlisting}
+
+\subsection{MAPE Calculation}
+
+MAPE is computed only on rows with strictly positive actual demand to prevent division by
+zero.
+
+\begin{lstlisting}[caption={MAPE with zero-demand masking.}, label=lst:mape]
+def mape(y_true, y_pred):
+    mask   = y_true > 0
+    y_true = y_true[mask]
+    y_pred = y_pred[mask]
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+\end{lstlisting}
+
+\subsection{Weighted Ensemble Calibration}
+
+Weights are calibrated on the first half of the test window; the ensemble is then
+evaluated exclusively on the second half.
+
+\begin{lstlisting}[caption={Leakage-free weighted ensemble calibration and evaluation.},
+                   label=lst:weights]
+mid   = len(merged) // 2
+calib = merged.iloc[:mid]   # 28 Apr -- 11 Jul 2024
+eval_ = merged.iloc[mid:]   # 12 Jul -- 24 Sep 2024
+
+weights       = compute_r2_weights(calib)
+ensemble_pred = weighted_average(eval_, weights)
+results       = evaluate(eval_['actual_quantity'], ensemble_pred)
+\end{lstlisting}
+
+\subsection{Cyclical Calendar Feature Engineering}
+
+Sine/cosine encodings preserve the cyclic structure of calendar variables.
+
+\begin{lstlisting}[caption={Cyclical calendar feature generation
+                   (\texttt{src/preprocessing.py}).}, label=lst:calendar]
+def add_calendar_features(df):
+    df['dow_sin']   = np.sin(2 * np.pi * df['dayofweek'] / 7)
+    df['dow_cos']   = np.cos(2 * np.pi * df['dayofweek'] / 7)
+    df['dom_sin']   = np.sin(2 * np.pi * df['day']       / 31)
+    df['dom_cos']   = np.cos(2 * np.pi * df['day']       / 31)
+    df['month_sin'] = np.sin(2 * np.pi * df['month']     / 12)
+    df['month_cos'] = np.cos(2 * np.pi * df['month']     / 12)
+    return df
+\end{lstlisting}
+
+\end{document}
