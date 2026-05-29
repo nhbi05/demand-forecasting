@@ -4,7 +4,15 @@
       "Bash(Get-ChildItem -Recurse -Force)",
       "Bash(Select-Object FullName, PSIsContainer)",
       "Bash(Sort-Object FullName)",
-      "Bash(Format-List)"
+      "Bash(Format-List)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\PREDTOR\\\\Desktop\\\\demand-forecasting\" -Recurse -Force)",
+      "Bash(Select-Object -Property FullName, PSIsContainer)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(Find \"c:\\\\Users\\\\PREDTOR\\\\Desktop\\\\demand-forecasting\" -name \"CLAUDE.md\" -type f)",
+      "Bash(python -c \"import json; nb=json.load\\(open\\('notebooks/04_Random_Forest.ipynb'\\)\\); [print\\(i, c['cell_type'], str\\(c.get\\('outputs',''\\)\\)[:200]\\) for i,c in enumerate\\(nb['cells']\\) if 'import' in str\\(c.get\\('outputs',''\\)\\) or 'lag' in str\\(c.get\\('source',''\\)\\).lower\\(\\) or 'importance' in str\\(c.get\\('source',''\\)\\).lower\\(\\)]\")",
+      "Bash(python -c ' *)",
+      "Bash(python scripts/generate_report_figures.py)",
+      "Bash(python -c \"import json; nb=json.load\\(open\\('notebooks/01_EDA.ipynb'\\)\\); print\\(len\\(nb['cells']\\), 'cells'\\); print\\('Last cell id:', nb['cells'][-1].get\\('id','N/A'\\)\\); print\\('Last cell type:', nb['cells'][-1]['cell_type']\\)\")"
     ]
   }
 }
