@@ -5,7 +5,7 @@
 > positive demand with at least 730 active sales days; final prediction files
 > must align on `date + item_id`.
 
-## ✅ COMPLETED DELIVERABLES
+## COMPLETED DELIVERABLES
 
 ### 1. PROJECT STRUCTURE ✓
 ```
@@ -16,12 +16,12 @@ demand-forecasting/
 │   ├── 03_RNN.ipynb                 [RNN model training]
 │   ├── 04_Random_Forest.ipynb       [Random Forest training]
 │   ├── 05_Gaussian.ipynb            [Gaussian Process training]
-│   └── 06_Ensemble.ipynb            [Unified ensemble system] ⭐
+│   └── 06_Ensemble.ipynb            [Unified ensemble system] 
 │
 ├── src/
 │   ├── __init__.py
 │   ├── preprocessing.py             [Unified data pipeline]
-│   ├── ensemble.py                  [Ensemble logic] ⭐
+│   ├── ensemble.py                  [Ensemble logic] 
 │   └── models/
 │       ├── lstm_model.py            [LSTM implementation]
 │       ├── rnn_model.py             [RNN implementation]
@@ -38,16 +38,16 @@ demand-forecasting/
 
 ---
 
-## 📊 UNIFIED ENSEMBLE SYSTEM
+##  UNIFIED ENSEMBLE SYSTEM
 
 ### Core Concept
 **NOT independent models → UNIFIED ENSEMBLE**
 
 All 4 models:
-- ✅ Train on SAME preprocessed data
-- ✅ Make predictions with IDENTICAL shape
-- ✅ Output in SAME scale ([0,1])
-- ✅ Combine into ONE final forecast
+-  Train on SAME preprocessed data
+-  Make predictions with IDENTICAL shape
+- Output in SAME scale ([0,1])
+-  Combine into ONE final forecast
 
 ### Data Pipeline
 ```
@@ -71,14 +71,14 @@ Raw Data (500 samples, 10 features)
 [Ensemble Combination]
 ├─ Simple Average
 ├─ Weighted Average
-└─ Performance-based Weights ⭐
+└─ Performance-based Weights 
     ↓
 [Final Unified Forecast]
 ```
 
 ---
 
-## 🎯 NOTEBOOK EXECUTION GUIDE
+##  NOTEBOOK EXECUTION GUIDE
 
 ### Notebook 1: EDA (01_EDA.ipynb)
 **Purpose:** Understand the data
@@ -127,7 +127,7 @@ Raw Data (500 samples, 10 features)
 
 **Output:** Gaussian predictions (scaled + uncertainty)
 
-### Notebook 6: Ensemble (06_Ensemble.ipynb) ⭐
+### Notebook 6: Ensemble (06_Ensemble.ipynb) 
 **Purpose:** UNIFIED ENSEMBLE SYSTEM
 - Load all 4 model predictions
 - Compare individual performance
@@ -144,9 +144,9 @@ Raw Data (500 samples, 10 features)
 
 ---
 
-## 🧠 KEY FEATURES
+##  KEY FEATURES
 
-### ✅ Unified Preprocessing (preprocessing.py)
+### Unified Preprocessing (preprocessing.py)
 ```python
 data = preprocessing.preprocess_data(X, y)
 # Returns:
@@ -156,7 +156,7 @@ data = preprocessing.preprocess_data(X, y)
 # - scaler_y                      (for inverse scaling)
 ```
 
-### ✅ Ensemble System (ensemble.py)
+###  Ensemble System (ensemble.py)
 ```python
 ensemble = EnsembleForecaster(method='weighted_average')
 
@@ -169,7 +169,7 @@ predictions = ensemble.predict(predictions_dict, y_true=y_test)
 # - ensemble.performance_scores: Individual metrics
 ```
 
-### ✅ Model Interface (each model)
+###  Model Interface (each model)
 ```python
 def train_and_predict(X_train, y_train, X_test):
     # Train
@@ -194,13 +194,13 @@ def train_and_predict(X_train, y_train, X_test):
 | Method | RMSE | MAE | R² | MAPE | Improvement |
 |--------|------|-----|------|------|-------------|
 | Simple Average | 0.0425 | 0.0298 | 0.8756 | 4.03% | +2.86% |
-| **Weighted Average** | **0.0418** | **0.0289** | **0.8823** | **3.91%** | **+3.65%** ⭐ |
+| **Weighted Average** | **0.0418** | **0.0289** | **0.8823** | **3.91%** | **+3.65%** |
 
 **Key Insight:** Ensemble outperforms any single model!
 
 ---
 
-## 🚀 DEPLOYMENT
+##  DEPLOYMENT
 
 ### Python Module Usage
 ```python
@@ -238,7 +238,7 @@ print(f"Model Weights: {ensemble.weights}")
 
 ---
 
-## 🎓 WHY THIS ENSEMBLE WORKS
+##  WHY THIS ENSEMBLE WORKS
 
 1. **Model Diversity**
    - Deep learning (LSTM/RNN): Captures temporal patterns
@@ -262,20 +262,20 @@ print(f"Model Weights: {ensemble.weights}")
 
 ---
 
-## ✨ PROFESSIONAL FEATURES
+##  PROFESSIONAL FEATURES
 
-✅ Clean code with comprehensive comments  
-✅ Reproducible (random seeds set everywhere)  
-✅ Scalable (easy to add new models)  
-✅ Well-documented (docstrings + markdown)  
-✅ Production-ready (error handling, validation)  
-✅ Visualizations (4 comprehensive charts in ensemble)  
-✅ Metrics (RMSE, MAE, R², MAPE)  
-✅ GitHub-ready (README, SETUP, requirements.txt)  
+Clean code with comprehensive comments  
+ Reproducible (random seeds set everywhere)  
+ Scalable (easy to add new models)  
+ Well-documented (docstrings + markdown)  
+ Production-ready (error handling, validation)  
+ Visualizations (4 comprehensive charts in ensemble)  
+ Metrics (RMSE, MAE, R², MAPE)  
+ GitHub-ready (README, SETUP, requirements.txt)  
 
 ---
 
-## 📚 LEARNING RESOURCES
+##  LEARNING RESOURCES
 
 The notebooks serve as educational materials:
 - **01_EDA:** How to explore time series data
@@ -286,7 +286,7 @@ Each notebook is self-contained and can be run independently (after data is load
 
 ---
 
-## 🎯 NEXT STEPS
+##  NEXT STEPS
 
 1. **Install dependencies:**
    ```bash
@@ -309,4 +309,4 @@ Each notebook is self-contained and can be run independently (after data is load
 
 ---
 
-**System Ready for Production Use! 🚀**
+**System Ready for Production Use! **

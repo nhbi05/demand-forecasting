@@ -7,15 +7,15 @@
 
 A professional, production-ready demand forecasting system that combines **LSTM**, **RNN**, **Random Forest**, and **Gaussian Process** models into a unified ensemble for accurate predictions.
 
-## 🎯 Key Features
+## Key Features
 
-✅ **Unified Ensemble Architecture** - All 4 models work together, not independently  
-✅ **Identical Input/Output** - All models trained on same data, same prediction shape  
-✅ **Multiple Ensemble Methods** - Simple averaging, weighted averaging, performance-based adaptation  
-✅ **Comprehensive Analysis** - Individual model metrics + ensemble performance comparison  
-✅ **Production Ready** - Clean module structure, well-documented, scalable  
+- **Unified Ensemble Architecture** - All 4 models work together, not independently  
+- **Identical Input/Output** - All models trained on same data, same prediction shape  
+- **Multiple Ensemble Methods** - Simple averaging, weighted averaging, performance-based adaptation  
+- **Comprehensive Analysis** - Individual model metrics + ensemble performance comparison  
+- **Production Ready** - Clean module structure, well-documented, scalable  
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 demand-forecasting/
@@ -44,7 +44,7 @@ demand-forecasting/
 └── README.md                     # This file
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install Dependencies
 
@@ -87,7 +87,7 @@ ensemble = EnsembleForecaster(method='weighted_average')
 ensemble_pred = ensemble.predict(predictions_dict)
 ```
 
-## 🔧 Core Modules
+## Core Modules
 
 ### `preprocessing.py`
 - **`load_synthetic_data()`** - Generate or load demand data
@@ -116,7 +116,7 @@ train_and_predict(X_train, y_train, X_test) -> predictions
   - Weighted averaging: Based on R² scores
   - Performance adaptation: Dynamic weight adjustment
 
-## 📊 Example Output
+## Example Output
 
 ```
 INDIVIDUAL MODEL PERFORMANCE
@@ -153,7 +153,7 @@ Weights:
   Gaussian: 0.25
 ```
 
-## 🎓 How the Ensemble Works
+## How the Ensemble Works
 
 ### Data Flow
 ```
@@ -185,7 +185,7 @@ ensemble_pred = Σ(weight_i × pred_i)
 
 Weights are calculated based on individual model R² scores on validation data.
 
-## 🔍 Key Design Principles
+## Key Design Principles
 
 1. **Unified Preprocessing** - All models receive identical scaled data
 2. **Identical Output Shape** - All predictions have shape (n_test_samples,)
@@ -193,7 +193,7 @@ Weights are calculated based on individual model R² scores on validation data.
 4. **Performance Tracking** - Individual + ensemble metrics compared
 5. **Scalability** - Easy to add new models to the ensemble
 
-## 📈 Extending the System
+## Extending the System
 
 ### Add a New Model
 
@@ -215,19 +215,19 @@ predictions_dict['new_model'] = new_pred_scaled
 
 3. The ensemble automatically adapts weights!
 
-## 🛠️ Technologies Used
+## Technologies Used
 
-- **Deep Learning**: TensorFlow/Keras (LSTM, RNN)
+- **Deep Learning**: PyTorch (LSTM, GRU)
 - **Traditional ML**: scikit-learn (Random Forest, Gaussian Process)
 - **Data Processing**: pandas, numpy
 - **Visualization**: matplotlib, seaborn
 - **Notebooks**: Jupyter
 
-## 📝 License
+## License
 
 MIT License - Free for academic and commercial use
 
-## 📞 Support
+## Support
 
 For issues or questions about the unified ensemble system, check:
 - Individual model notebooks for model-specific details
@@ -236,4 +236,4 @@ For issues or questions about the unified ensemble system, check:
 
 ---
 
-**Built with ❤️ for production demand forecasting**
+**Built for production demand forecasting**
